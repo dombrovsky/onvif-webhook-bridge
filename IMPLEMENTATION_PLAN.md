@@ -33,7 +33,7 @@ Verified implementation detail: SubscriptionManagerClient.RenewAsync accepts a c
 
 ### Device and destination evidence
 
-Library documentation cannot establish behaviour of a particular device or firmware. Phase 1 verified live initialization notifications, lease renewal and clean shutdown on one device; simulation verified repeated/false values, extension preservation and recovery from a pull fault. Complete detection activation/reset cycles and real reboot recovery remain pending. Keep device identity and deployment details in ignored private notes; public evidence uses anonymous labels and sanitized notifications. See [the verification record](docs/ONVIF_OBSERVATIONS.md).
+Library documentation cannot establish behaviour of a particular device or firmware. Phase 1 verified live initialization notifications, lease renewal and clean shutdown on one device; simulator testing verified unfiltered PullPoint receipt of synthetic human-detection and motion topics, true/false values, parsed Source/Data and raw-message output. Complete detection activation/reset cycles and real reboot recovery remain pending. Keep device identity and deployment details in ignored private notes; public evidence uses anonymous labels and sanitized notifications. See [the verification record](docs/ONVIF_OBSERVATIONS.md).
 
 Destinations receive ordinary configured HTTP actions. No vendor API contract is required in the implementation. No live destination has been called; response and action semantics remain unverified.
 
@@ -42,6 +42,14 @@ Destinations receive ordinary configured HTTP actions. No vendor API contract is
 One production project `src/OnvifWebhookBridge/`, one test project `tests/OnvifWebhookBridge.Tests/`, and a temporary focused observation tool `tools/OnvifProbe/`. Keep production components as concrete small classes grouped into `Onvif/`, `Events/`, `Rules/`, `Dispatch/`, `Persistence/`, and `Web/`. Use interfaces only at genuinely testable external seams (camera transport, clock, persistence if needed); no generic repositories, domain framework, internal broker, or plugin abstraction.
 
 Flow: per-camera pull → normalize → bounded inspector history → matcher/state/cooldown → bounded dispatch admission → independent HTTP execution/status. Persistence provides configuration snapshots; it never sits in the polling hot path. Immutable configuration revisions invalidate obsolete queued actions. Use DI, hosted services, HttpClientFactory, direct SQL, and simple polling UI. Add only components required by the current phase.
+
+## Test strategy: ONVIF simulator for integration tests
+
+Use [onvifsim](https://github.com/mrtian2016/onvifsim) as the standard ONVIF integration-test fixture, run in Docker according to its documentation. Integration tests that exercise ONVIF subscription, notification parsing, worker lifecycle, or the application end-to-end pipeline must connect to this simulator and create events through its documented control API. Do not substitute hand-built notifications or a fake ONVIF transport in an integration test. This includes full camera→event→rule→HTTP flows; use a small local HTTP capture endpoint as the destination while onvifsim supplies the ONVIF events.
+
+Unit tests may use simulated request/response objects, in-memory transports, synthetic event fixtures, fake clocks, and other isolated test doubles. Keep these strictly at unit scope; they do not establish integration or interoperability. Run simulator-backed tests in CI where Docker is available, and make the prerequisite, image version/tag, startup/control steps, synthetic event triggers, and teardown repeatable and documented. Prefer a pinned simulator image or commit over floating `latest`; verify the selected reference before adopting it. Never place personal camera/deployment data in test configuration or committed output.
+
+The simulator verifies protocol and application integration against its implementation only. It does not prove a physical device's topic/schema, firmware behaviour, or real camera recovery. Keep any explicitly required physical-device checks separately labelled and pending when unavailable.
 
 ## Phase 1 — End-to-end ONVIF observation and NativeAOT feasibility
 
@@ -83,7 +91,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 - Before declaring a **real transition mapping** verified, privately observe at least two activation/clear cycles for each event type used by that mapping. Validate field section/value, stable Source/Key identity and property-operation behaviour. If a device emits no reset or only initialization, document that and prefer occurrence mode; do not invent transitions. Generic matcher tests can pass while this specific check remains pending.
 - Existing diagnostic smoke test remains green. No camera configuration changes and no external actions are required.
 
-**Tests/verification:** synthetic fixtures cover namespace-prefixed topics and differing aliases (exact string misses are intentional), case/topic misses, Source/Data name collision, duplicate/missing fields, missing/invalid timestamp, unknown operations, structured extensions and malformed optional content. Test independent rules/identities, first/false→true/true→true/true→false, Initialized/Deleted/reconnect/rule-edit resets, XML boolean versus text mode, cooldown boundaries with a fake monotonic clock, history count/byte caps, identity eviction and simultaneous admission. No sleeps in timing tests. Recheck NativeAOT/trimming on the new normalization/matching path and record the target/results without personal details.
+**Tests/verification:** unit tests may use synthetic fixtures for namespace-prefixed topics and differing aliases (exact string misses are intentional), case/topic misses, Source/Data name collision, duplicate/missing fields, missing/invalid timestamp, unknown operations, structured extensions and malformed optional content. Test independent rules/identities, first/false→true/true→true/true→false, Initialized/Deleted/reconnect/rule-edit resets, XML boolean versus text mode, cooldown boundaries with a fake monotonic clock, history count/byte caps, identity eviction and simultaneous admission. No sleeps in timing tests. Any integration test of actual normalization from ONVIF notifications must use onvifsim and its event-control API. Recheck NativeAOT/trimming on the new normalization/matching path and record the target/results without personal details.
 
 **Exit/handoff:** deliver normalized events plus deterministic matching/admission decisions and passing tests. Record any pending device-cycle check explicitly. Phase 3 then attaches generic bounded HTTP delivery to admitted matches; it must not send a live transition action until that mapping's real lifecycle is verified.
 
@@ -95,9 +103,9 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Expected files:** `Dispatch/{HttpActionDispatcher,DispatchQueue,ExecutionStatus}.cs`, minimal `Program.cs`/DI wiring and single-camera hosted worker using the proven adapter, `tests/.../Dispatch/`, `docs/HTTP_VERIFICATION.md`.
 
-**Acceptance criteria:** observed or simulated event reaches a local HTTP recorder with configured GET or POST, headers and literal JSON; two rules both dispatch independently; delivery failure leaves polling responsive. Validate URLs/headers/body; redirects disabled, limits/cancellation/deadline/retry opt-in enforced, logs redacted. Manual test clearly reports transport result without claiming destination-side effect.
+**Acceptance criteria:** an event from onvifsim reaches a local HTTP recorder with configured GET or POST, headers and literal JSON; two rules both dispatch independently; delivery failure leaves polling responsive. Validate URLs/headers/body; redirects disabled, limits/cancellation/deadline/retry opt-in enforced, logs redacted. Manual test clearly reports transport result without claiming destination-side effect.
 
-**Tests/verification:** fake handler plus local receiver covers request construction, headers isolated across destinations, response disposal, 2xx/4xx/5xx/408/429, Retry-After cap, timeout/transport cancellation, zero/two additional attempts, duplicate-effect caveat, overflow, per-rule serialization and fairness. Capture logs containing deliberately seeded fake secrets and assert absence. With a privately configured destination, verify a real matching notification causes the expected destination action, separately from HTTP status; otherwise record this check pending. Label every simulated run.
+**Tests/verification:** unit tests may use a fake handler for request construction, headers isolated across destinations, response disposal, 2xx/4xx/5xx/408/429, Retry-After cap, timeout/transport cancellation, zero/two additional attempts, duplicate-effect caveat, overflow, per-rule serialization and fairness. Integration tests must use onvifsim to generate notifications and a local HTTP capture endpoint to verify end-to-end dispatch. Capture logs containing deliberately seeded fake secrets and assert absence. A real external destination action is optional and must be separately authorized; HTTP status alone does not verify destination-side effect.
 
 ## Phase 4 — Multiple independent cameras and resilient lifecycle
 
@@ -109,7 +117,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Acceptance criteria:** two cameras subscribe independently; one outage/reboot does not interrupt the other or dispatch; enable/edit/disable/remove cancel obsolete work and invalidate obsolete jobs; reconnect refreshes discovered services and resets transition epochs; lease renew/recreate and empty polls are correct; clients do not accumulate across resubscriptions. Stop completes within a documented deadline.
 
-**Tests/verification:** deterministic fake transport for two cameras, expired lease, authentication/unsupported-service faults, network drop, restart, invalid subscription, renewal failure, repeated empty polls, backoff cap/jitter, edit racing a pull, shutdown, unsubscribe failure and leaked-worker/client checks. Real camera outage/recovery run if available; a second simulated camera is acceptable but labelled. Repeat native smoke test for lifecycle changes.
+**Tests/verification:** unit tests may use deterministic fake transport for expired-lease state decisions, backoff cap/jitter calculations, edit racing a pull, shutdown bookkeeping, and leaked-worker/client checks. Integration tests for two cameras, expired lease, authentication/unsupported-service faults, network drop/restart, invalid subscription, renewal failure, repeated empty polls, unsubscribe failure, and independent recovery must use onvifsim with its documented control API/fault injection. Real-device outage/recovery remains a separately labelled hardware check. Repeat native smoke test for lifecycle changes.
 
 ## Phase 5 — SQLite configuration persistence
 
@@ -121,7 +129,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Acceptance criteria:** restart restores enabled configurations, secrets and rules; transient event/dispatch state is not persisted; parameterized writes are atomic; referenced-camera deletion rejected; failed save leaves active snapshot unchanged; permissions cover DB and sidecars. Unreadable/corrupt/unwritable data fails clearly without exposing secrets or deleting data. Exact SQLite dependency/native asset versions recorded.
 
-**Tests/verification:** temporary DB round-trip, migrations from an earlier schema, rollback, foreign keys, simultaneous edits/revision conflict, explicit secret preserve/replace/clear, invalid configuration, restart reconciliation, backup/restore and AOT native SQLite loading. Verify actual Linux file modes; Windows ACL behaviour is not evidence for container modes.
+**Tests/verification:** temporary DB round-trip, migrations from an earlier schema, rollback, foreign keys, simultaneous edits/revision conflict, explicit secret preserve/replace/clear, invalid configuration, backup/restore and AOT native SQLite loading may be unit/storage tests with simulated data. Integration tests for restart reconciliation with active cameras/rules must use onvifsim. Verify actual Linux file modes; Windows ACL behaviour is not evidence for container modes.
 
 ## Phase 6 — Authenticated Minimal API administration
 
@@ -133,7 +141,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Acceptance criteria:** fail closed without admin; no plaintext admin password persisted; all administration and test routes authenticated; mutations/manual tests reject missing/invalid CSRF or foreign origin; secret reads masked; conflict/validation results understandable; liveness reveals no configuration. Environment bootstrap cannot silently override an established administrator. Native publish/run covers login, persistence and API serialization.
 
-**Tests/verification:** unauthenticated/expired session, correct/incorrect login and throttling, secure cookie options, CSRF/origin checks, restart invalidation, CRUD revision handling, masked secrets and exception/log redaction. Test full camera→event→rule→local HTTP path via authenticated APIs, including worker reconciliation.
+**Tests/verification:** authentication/session/CSRF validation and log-redaction unit tests may use simulated request/response objects. Integration tests for API camera configuration, worker reconciliation, event delivery, and the full camera→event→rule→local HTTP path must run against onvifsim and its control API, including authenticated application APIs.
 
 ## Phase 7 — Minimal browser screens
 
@@ -145,7 +153,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Acceptance criteria:** all R5 screen operations work through protected APIs; inspector shows both states and structured/additional properties without silent suppression; rule draft uses observed matching string and chosen section/value and starts disabled; last HTTP status/error is visible; save/edit secrets are masked and unambiguous. Camera/XML/URL content is rendered as text, not executable markup. Refresh polling is bounded and stops at logout.
 
-**Tests/verification:** browser walkthrough CRUD/test/connectivity/disconnected status, multiple matching rules, false/unmatched/Initialized display, create/edit draft and secret clear, server restart, login/session expiry; injected HTML/script in event/name fields stays inert. Repeat native full-path smoke test, not just a development server preview.
+**Tests/verification:** browser walkthrough CRUD/test/connectivity/disconnected status, multiple matching rules, false/unmatched/Initialized display, create/edit draft and secret clear, server restart, login/session expiry, and inert rendering of injected HTML/script in event/name fields. Integration walkthroughs must source events from onvifsim; repeat native full-path smoke test, not just a development server preview.
 
 ## Phase 8 — Docker, Compose, multi-platform CI and release guide
 
@@ -157,7 +165,7 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 **Acceptance criteria:** amd64/arm64 images run tested native executables; evaluate arm/v7 build/toolchain/native SQLite and hardware smoke test, adding it to manifests only after passing. Explicitly explain no Linux x86 support. Native per-platform build jobs feed a manifest; PRs build/test without registry write credentials, trusted releases can publish GHCR with minimal permissions. Pin reviewed dependencies/actions/base images and document upgrades.
 
-**Tests/verification:** `docker compose config`, image build per target, UID/file permissions, mounted data persistence after recreation, read-only root filesystem if adopted, configurable port and localhost default bind, working health probe, graceful termination/restart, DB migration/restore, TLS CA trust, and camera/event/subscription/destination access over bridge networking. Do not mark camera outages as process health failures. Check image manifest, startup/idle memory/CPU/image size, queue overload and longer two-camera run. Verify on target hardware if available; otherwise explicitly record deployment-host interoperability pending. Publish only generic platform specifications and anonymous test labels.
+**Tests/verification:** `docker compose config`, image build per target, UID/file permissions, mounted data persistence after recreation, read-only root filesystem if adopted, configurable port and localhost default bind, working health probe, graceful termination/restart, DB migration/restore, TLS CA trust, and camera/event/subscription/destination access over bridge networking. All Docker integration tests must use onvifsim as their ONVIF endpoint and event source. Do not mark camera outages as process health failures. Check image manifest, startup/idle memory/CPU/image size, queue overload and longer two-camera run. Verify on target hardware if available; otherwise explicitly record deployment-host interoperability pending. Publish only generic platform specifications and anonymous test labels.
 
 README must explain how to create mappings from observed notifications, synthetic versus hardware results, environment/password-file bootstrap, HTTPS proxy, volume ownership/backups, connection troubleshooting, cooldown/transitions/retries and possible duplicate actions. HTTP walkthroughs use generic GET/POST rules, synthetic topics/fields and clearly labelled placeholders, never personal addresses, device models, deployment details, credentials or real destination URLs. Finish with tests and platform limitations recorded.
 
