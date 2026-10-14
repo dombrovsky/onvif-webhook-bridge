@@ -2,9 +2,9 @@
 
 ## Current repository state and authorization
 
-This repository is in a requirements and planning session. The current authorized deliverables are only `REQUIREMENTS.md`, `IMPLEMENTATION_PLAN.md`, and this file, committed to Git. Do not create the application, build scaffolding, tests, UI, Docker/Compose files, workflows, or README during this session.
+The requirements and planning documents are committed. The currently authorized implementation is a small diagnostic console prototype in `tools/OnvifProbe/`: one `Program.cs`, a minimal `net10.0` project using SharpOnvifClient 0.11.2, and a short README. Observe all notifications, reconnect and stop gracefully; do not implement the production bridge, UI, persistence, dispatch, Docker/Compose, or workflows. The prototype request does not require NativeAOT publishing; that part of the longer plan remains pending.
 
-When a later user explicitly authorizes implementation, work on the requested phase of `IMPLEMENTATION_PLAN.md`. That later instruction supersedes this planning-only restriction. Read both planning documents before coding. Do not interpret a phase request as authorization to implement the entire product.
+When a later user explicitly authorizes more implementation, work on the requested phase of `IMPLEMENTATION_PLAN.md`. That later instruction supersedes this prototype-only scope. Read both planning documents before coding. Do not interpret a phase request as authorization to implement the entire product. For the diagnostic prototype, keep the implementation a console application without DI or production architecture.
 
 ## Implementation discipline
 

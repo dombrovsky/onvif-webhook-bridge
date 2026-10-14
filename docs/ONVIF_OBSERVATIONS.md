@@ -1,0 +1,21 @@
+# Prototype verification record
+
+This record contains generic verification results only. Keep personal configuration and device-identifying observations in ignored private local files.
+
+- Scope: diagnostic console prototype; not completion of every phase 1 gate in the product plan.
+- SDK: .NET 10.0.400; target `net10.0`.
+- Dependencies: SharpOnvifClient and SharpOnvifCommon 0.11.2.
+- Package source revision: `a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71`, from NuGet repository metadata. Reviewed SimpleOnvifClient, the console example, generated Events clients/data contracts and common notification contracts.
+- API: SimpleOnvifClient.GetServicesAsync, PullPointSubscribeAsync(leaseSeconds), PullPointPullMessagesAsync(address, timeoutSeconds, maxMessages), PullPointUnsubscribeAsync(address); generated SubscriptionManagerClient.RenewAsync(RenewRequest, CancellationToken).
+- Event model: NotificationMessageHolderType.Topic contains XML nodes; Message is an XmlElement. Print its complete exposed tree rather than use standard detection helpers. The library does not expose a complete original envelope through these convenience methods; unknown envelope content may already be discarded. Reference parameters are not propagated by SimpleOnvifClient's address-only methods.
+- Build: passed, zero warnings/errors. Help, required endpoint, invalid endpoint and incomplete credentials checked.
+- Simulated runtime: a temporary local SOAP service supplied two batches of three notifications with repeated true and false values, duplicate Source fields, Key fields, timestamp/operation attributes, ElementItems and unknown vendor XML. All six printed; raw message XML printed. Unfiltered subscribe, two renewals and fresh subscription after a SOAP fault verified. Harness force-terminated its child process after assertions; that run did not test graceful shutdown.
+- Shutdown: Ctrl+C during connection/retry printed `Stopped`; subsequent real-device testing also confirmed successful unsubscribe and clean stop.
+- Initial hardware check: a brief TCP reachability check failed. Subsequent debugging using private local configuration successfully connected, subscribed and received real initialization notifications. The original periodic SOAP fault was reproduced on renewal, followed by unsubscribe/resubscribe and new initialization notifications. This was a renewal failure, not a failed event pull.
+- Cause and fix: the 0.11.2 generated client/transport emits authentication headers but no WS-Addressing MessageID on Renew. Add standards-based Action, unique MessageID, To and anonymous ReplyTo using IClientAuthentication.CreateSecurityHeader, delegating authentication and transport back to OnvifAuthenticationSettings. No vendor-specific topic or endpoint logic was added.
+- Regression test: `tests/OnvifProbe.Smoke.ps1` runs a synthetic localhost SOAP service. It requires renewal WS-Addressing headers and unique MessageIDs, then verifies two renewals, all six notifications and resubscription after a separate simulated pull fault. Passed. No launch profile or personal credentials are read.
+- Real-device renewal verification: the corrected probe remained subscribed for more than 40 minutes and completed at least 25 consecutive successful renewals, with no observed renewal fault or resubscription during that interval. This verifies the renewal fix on one anonymously documented device; it is not a general interoperability guarantee.
+- Detailed event activation/reset, real-device reboot recovery, other-device interoperability and longer-term soak testing remain pending.
+- NativeAOT and trimming: the user reports successful verification with the library. This is user-verified evidence, not a publish/runtime test performed by this agent. Target architecture, operating system, publish arguments and exercised runtime paths were not supplied; Linux/container and per-architecture verification remain separate future checks.
+
+Reproduce build and hardware checks using README.md. The synthetic regression service is a test script, not a runtime dependency. Private configuration and development artifacts remain ignored. No camera configuration changes were made.

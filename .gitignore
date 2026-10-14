@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+.local/
+.env
+*.local.*
+**/Properties/launchSettings.json
+
+.vs/
