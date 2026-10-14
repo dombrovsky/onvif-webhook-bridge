@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Status: requirements and implementation plan only; no application has been implemented or interoperability demonstrated.
+Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility phase complete; production bridge requirements below remain to be implemented. Verification evidence and remaining hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and docs/ONVIF_OBSERVATIONS.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The requested application, UI, Docker files, README, tests, and builds are future implementation deliverables. The contradictory final “Do not implement” list is interpreted as excluding them from this planning session, not removing earlier product requirements. This session creates and commits only REQUIREMENTS.md, IMPLEMENTATION_PLAN.md, and AGENTS.md.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test. The full bridge, UI, persistence, HTTP dispatcher and Docker deployment remain future deliverables; completing the probe does not authorize implementing all of them at once.
 
 ## Functional requirements
 
@@ -83,9 +83,9 @@ No video streaming/recording, FFmpeg, RTSP proxy, MQTT, firmware changes, mobile
 
 | Question | Current assumption / required evidence | Gate |
 | --- | --- | --- |
-| Which event types and lifecycle does a test device expose? | Actual topics, values, operation, false/reset timing, identity and renewal require observation. Keep device identity, firmware and settings in private verification notes. | Phase 1 real-camera record |
-| Can the coding environment reach a test device? | Connectivity must be checked during implementation using private local configuration. Simulations cannot establish interoperability. | Phase 1 |
-| Does released SharpOnvifClient preserve every extension and endpoint reference parameter under AOT? | Source review supports PullPoint operations; actual released assembly and runtime must be checked. | Phase 1 |
+| Which event types and lifecycle does a test device expose? | Real initialization notifications and sustained renewal verified; activation/reset cycles and stable identity for a chosen real rule remain pending. Keep device identity and settings private. | Phase 2 real-rule validation |
+| Can the coding environment reach a test device? | Successful real-device connect/subscribe/observation and clean shutdown verified using private configuration. Recheck reachability in later sessions. | Phase 1 complete; phase 4 recovery |
+| Does released SharpOnvifClient preserve every extension and endpoint reference parameter under AOT? | Exposed message XML preserves structured/unknown content; full envelope is unavailable and convenience methods omit reference parameters. User verified NativeAOT/trimming; new processing paths and Linux targets need their own checks. | Phases 2, 4 and 8 |
 | Transition initialization and identity semantics? | Proposed rules above avoid reconnect-triggered actions; revise from observed Source/Key fields before implementing matcher. | Phases 1–2 |
 | Should retries be enabled by default? | Opt-in because destination actions may not be idempotent. Confirm destination behaviour independently. | Phase 3 |
 | Administrator setup / transport? | Environment bootstrap, opaque session, reverse-proxy HTTPS proposed; no public first-run wizard. | Phase 6 |

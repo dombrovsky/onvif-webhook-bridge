@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14. No code, camera access test, package restore, build, or runtime verification was performed in this session. Each numbered phase is a separate focused coding session, with explicit inputs and an independently reviewable completion record. File names below are intended locations, not files already present.
+Planning baseline: 2026-10-14; updated after prototype verification. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phase 2 is the next coding session; phases 2–8 are not implemented. Each phase remains independently reviewable. Future file names are proposed locations; existing prototype files are listed in phase 1.
 
 ## Dependency research
 
@@ -17,7 +17,9 @@ The inspected [SimpleOnvifClient source](https://raw.githubusercontent.com/jimm9
 - `PullPointUnsubscribeAsync(string subscriptionReferenceAddress)` exists; there is no PullPoint-renew convenience method in this inspected section. `BasicSubscriptionRenewAsync` uses the generated `SubscriptionManagerClient.RenewAsync` with `RenewRequest`.
 - Pulling allows HTTP timeout headroom. Convenience methods shown have no cancellation-token parameter; do not assume cancellation or timeout control that these signatures do not expose.
 
-The inspected [client sample](https://raw.githubusercontent.com/jimm98y/SharpOnvif/master/src/Onvif.Client/Program.cs) loops over `messages.NotificationMessage`, using only motion/tamper helpers. Its cached content predates the current transport API. Treat it as evidence of sample flow, not copy-ready version-matched code. Do not use helpers that discard vendor properties. In phase 1 inspect the **restored 0.11.2 assembly and matching source**, including generated Events clients, serialization, cancellation, renewal, endpoint reference headers, and extensions. Record version/source revision and compile against actual signatures. A lower-level generated client may be needed; keep that decision inside one ONVIF adapter.
+The initially inspected [client sample](https://raw.githubusercontent.com/jimm98y/SharpOnvif/master/src/Onvif.Client/Program.cs) had cached content predating the transport API. Phase 1 subsequently restored 0.11.2 and reviewed its exact source revision, `a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71`, including its example and generated contracts. Continue using version-matched APIs, not old cached snippets or motion helpers that discard vendor properties.
+
+Verified implementation detail: SubscriptionManagerClient.RenewAsync accepts a cancellation token, while SimpleOnvifClient convenience calls do not. In 0.11.2 the generated renewal request lacks WS-Addressing headers; the prototype adds them through IClientAuthentication.CreateSecurityHeader and delegates authentication/transport unchanged. Preserve this fix and its regression test when extracting the production adapter. Reference parameters are still not propagated by the convenience methods, and original SOAP-envelope content is not fully exposed.
 
 ### .NET, persistence, and containers
 
@@ -31,7 +33,7 @@ The inspected [client sample](https://raw.githubusercontent.com/jimm98y/SharpOnv
 
 ### Device and destination evidence
 
-Library documentation cannot establish behaviour of a particular device or firmware. Event availability, topic/field names, authentication, initialization/reset notifications, lease timing and recovery require direct observation. No device-specific behaviour was verified in this planning session. Keep device identity and deployment details in ignored private notes; public evidence uses anonymous labels and sanitized notifications.
+Library documentation cannot establish behaviour of a particular device or firmware. Phase 1 verified live initialization notifications, lease renewal and clean shutdown on one device; simulation verified repeated/false values, extension preservation and recovery from a pull fault. Complete detection activation/reset cycles and real reboot recovery remain pending. Keep device identity and deployment details in ignored private notes; public evidence uses anonymous labels and sanitized notifications. See [the verification record](docs/ONVIF_OBSERVATIONS.md).
 
 Destinations receive ordinary configured HTTP actions. No vendor API contract is required in the implementation. No live destination has been called; response and action semantics remain unverified.
 
@@ -43,35 +45,47 @@ Flow: per-camera pull → normalize → bounded inspector history → matcher/st
 
 ## Phase 1 — End-to-end ONVIF observation and NativeAOT feasibility
 
-**Dependencies:** none beyond the existing repository and .NET 10/native build environment. Real verification needs camera access, credentials if required, and someone able to generate detections/reboot the camera. Do not run upstream sample PTZ/video operations.
+**Status: complete — diagnostic and library feasibility.** Closure uses the focused prototype scope requested after the original plan. It does not claim every original production-interoperability check passed. Remaining checks are assigned below rather than silently marked verified.
 
-**Exact scope:** build a one-camera observation tool using the actual SharpOnvifClient 0.11.2 APIs. Read device/services/event properties when supported; establish an unfiltered PullPoint subscription; pull and inspect all notification properties/unknown XML; unsubscribe. Exercise lease renewal/recreation and transport recovery sufficiently to prove the path. No rules, webhook actions, UI, DB, production multi-camera management, or deployment files.
+**Dependencies:** .NET 10 SDK, pinned SharpOnvifClient 0.11.2, private endpoint/optional credentials; real-device access for observation.
 
-**Expected files:** `tools/OnvifProbe/{OnvifProbe.csproj,Program.cs}`, minimal parser/adapter only where reusable, `tests/OnvifWebhookBridge.Tests/` parser fixtures/tests, `docs/ONVIF_OBSERVATIONS.md`, `docs/fixtures/onvif/` sanitized captures, solution/build settings and `.gitignore` as needed. No checked-in credentials, auth envelopes, raw secret subscription tokens, or unsanitized captures.
+**Completed scope:** one-camera console probe using actual SimpleOnvifClient APIs; service discovery; unfiltered PullPoint subscribe/pull; complete exposed message-tree/raw XML output; renewal with WS-Addressing compatibility fix; delayed reconnect/resubscribe; Ctrl+C and bounded unsubscribe/disposal. No forwarding, UI, database or production multi-camera system.
 
-**Acceptance criteria:**
+**Delivered files:** `tools/OnvifProbe/{OnvifProbe.csproj,Program.cs}`, `tests/OnvifProbe.Smoke.ps1`, `README.md`, `.gitignore`, and `docs/ONVIF_OBSERVATIONS.md`. Private launch profiles/configuration remain ignored.
 
-- Compile against pinned package; record exact API/types used, transport/serialization limitations, and evidence labels: source-reviewed, simulated, real-camera, native-runtime.
-- Real run at a privately configured endpoint observes available event types separately, their true/false or actual alternative lifecycle, full topics, Source/Data/Key, ElementItems, timestamps and property operations. Repeat activation/clear at least twice. If any signal is absent, report absent/unknown rather than assigning an assumed schema.
-- Keep device model/firmware/settings and real endpoint details in ignored private notes. Public evidence uses anonymous labels and records sanitized subscription shape, requested/granted lease, idle long-poll behaviour, timeout relationship, renewal beyond two lease periods, and recovery after a coordinated restart/network interruption. Confirm no accidental topic filter.
-- Publish NativeAOT for an initial Linux target and run subscribe/parse/recovery in that native executable. Investigate warnings rather than suppressing them globally. If AOT fails, document a narrow remediation or explicit stack decision; do not silently replace NativeAOT or the library.
-- Demonstrate bounded shutdown and preservation of extension data. Determine how to carry endpoint reference parameters and cancel underlying calls with actual supported APIs.
+**Acceptance evidence:**
 
-**Tests/verification:** sanitized representative SOAP fixtures include human/motion examples explicitly labelled synthetic until captured, true/false, unknown topic, duplicates, Source/Data/Key, missing timestamp, ElementItem, malformed payload and namespace aliases. Verify normalization loses no available properties. Separate native smoke-test evidence from JIT tests and source review.
+- Build: .NET SDK 10.0.400, `net10.0`, zero warnings/errors; exact restored library API/source reviewed.
+- Live device: connect, unfiltered subscribe, receive initialization notifications with topics/fields/timestamps/operations, reproduce original renewal fault, then verify at least 25 successful corrected renewals over more than 40 minutes without recurrence. Ctrl+C unsubscribed and stopped cleanly.
+- Simulation: repeated true and false states, duplicate fields, Key/structured/unknown XML, raw message output, unique renewal MessageIDs, and resubscription after a separate pull fault passed.
+- NativeAOT/trimming: user reports successful verification with the library. Exact target/publish arguments/runtime paths were not supplied; preserve this attribution rather than claim agent-run Linux verification.
 
-**Exit gate:** if hardware is inaccessible, deliver reproducible probe instructions and simulated parser/native results, mark **real-camera gate pending**, and stop camera-specific implementation assumptions. Later generic phases may be explicitly requested while this gate is pending, but must not claim device interoperability or select an unobserved mapping. If hardware is reachable, confirm observed event behaviour before proceeding to the remainder. Each failure has a concrete recorded next step.
+**Carried-forward verification:** phase 2 confirms activation/reset semantics before validating a real transition rule; phase 4 tests real restart/network recovery and independent workers; phase 8 verifies Linux/container architectures. Other-device reference-parameter support remains a known interoperability limitation to address when encountered. Broader malformed-payload/normalization coverage belongs in phase 2. No vendor schema or endpoint is hardcoded based on this feasibility result.
+
+**Handoff:** the library choice and basic event path are proven enough to proceed. Preserve the observer as a diagnostic tool, reuse its proven subscription/renewal approach, and avoid another transport rewrite or package upgrade without a concrete reason.
 
 ## Phase 2 — Normalized events and deterministic rule matching
 
-**Dependencies:** phase 1 parser contract, topic representation, identity/property-operation findings; completed real-camera gate for the normal sequence.
+**Status: next focused coding session.** Goal: turn observed notifications into testable, vendor-independent rule decisions. HTTP actions remain phase 3 so matching can be verified without triggering external services.
 
-**Exact scope:** promote the proven parser into the production project; implement bounded event history, exact topic/Source-or-Data matching, explicit boolean mode, occurrence/transition policy and cooldown/admission state. No network dispatch, persistence, UI or multiple workers.
+**Dependencies:** completed phase 1 probe, 0.11.2 notification contract and WS-Addressing fix, REQUIREMENTS R2/R3. Synthetic fixtures may drive development; a real mapping requires privately observed activation/reset evidence. No dependence on an assumed boolean field name.
 
-**Expected files:** `Events/{NormalizedEvent,EventNormalizer,EventHistory}.cs`, `Rules/{ForwardingRule,RuleMatcher,RuleState}.cs`, corresponding focused tests and updated observation/semantics documentation.
+**Exact scope:** create the small production event/matching component and focused tests. Normalize directly from the library-exposed XmlElement instead of relying on detection helpers. Add a 100-event bounded history and exact camera/topic/Source-or-Data matching, explicit boolean mode, occurrence/transition policy and cooldown/admission state. Use in-memory test rules and recorded decisions only. Keep the working probe available; no HTTP dispatch, web server, DI framework, persistence, multiple workers or deployment files in this session.
 
-**Acceptance criteria:** all notification properties survive normalization; display/matching topic relationship is explicit; multiple rules can match; false/unmatched messages remain in history and update state; first/Initialized observations do not trigger transitions; repeated true does not retrigger until reset; cooldown and bounded identity eviction follow REQUIREMENTS R3. Match a configured field, never a guessed `State` field.
+**Expected files/components:** `src/OnvifWebhookBridge/OnvifWebhookBridge.csproj`, `Events/{NormalizedEvent,EventNormalizer,EventHistory}.cs`, `Rules/{ForwardingRule,RuleMatcher,RuleState}.cs`, `tests/OnvifWebhookBridge.Tests/` project with focused fixtures/tests, and updates to the verification record. Add a controllable time seam only if required for timing tests. No generic repository or automation framework. Actual device configuration/captures stay private; committed fixtures use synthetic topics/fields.
 
-**Tests/verification:** exact case/topic misses; Source/Data same name; duplicates/missing values; XML boolean lexical values versus text; independent rules/identities; first/false→true/true→true/true→false; Initialized/Deleted/unknown operation; reconnect/rule reset; cooldown boundary with fake monotonic time; history count/byte caps; simultaneous admission and overflow rollback. No sleeps in timing tests.
+**Acceptance criteria:**
+
+- Preserve full topic text, dialect and exposed namespace context; both timestamps, property operation, Source/Data/Key collections including duplicates, structured fields and complete available raw message XML. Document library loss versus application truncation separately. Exact matching uses the displayed topic string, including any prefix; do not silently strip prefixes or implement semantic topic rewriting in this phase.
+- Admit every normalized notification to bounded history before matching; false/unmatched/Initialized messages remain visible. Unknown/malformed optional content does not discard the raw message or break processing.
+- Multiple independent enabled rules may match one event. Match a configured section/name/value; text equality is ordinal and boolean mode recognizes XML lexical true/false/1/0. Missing fields do not match; duplicate entries follow REQUIREMENTS R3.
+- In transition mode the first/Initialized observation establishes a baseline, not a trigger. Only a known nonmatching-to-matching change fires; false/nonmatching observations update state during cooldown. Repeated matching values do not retrigger. Deleted/epoch-reset/rule-edit handling, identity bounds and atomic cooldown admission follow R3.
+- Before declaring a **real transition mapping** verified, privately observe at least two activation/clear cycles for each event type used by that mapping. Validate field section/value, stable Source/Key identity and property-operation behaviour. If a device emits no reset or only initialization, document that and prefer occurrence mode; do not invent transitions. Generic matcher tests can pass while this specific check remains pending.
+- Existing diagnostic smoke test remains green. No camera configuration changes and no external actions are required.
+
+**Tests/verification:** synthetic fixtures cover namespace-prefixed topics and differing aliases (exact string misses are intentional), case/topic misses, Source/Data name collision, duplicate/missing fields, missing/invalid timestamp, unknown operations, structured extensions and malformed optional content. Test independent rules/identities, first/false→true/true→true/true→false, Initialized/Deleted/reconnect/rule-edit resets, XML boolean versus text mode, cooldown boundaries with a fake monotonic clock, history count/byte caps, identity eviction and simultaneous admission. No sleeps in timing tests. Recheck NativeAOT/trimming on the new normalization/matching path and record the target/results without personal details.
+
+**Exit/handoff:** deliver normalized events plus deterministic matching/admission decisions and passing tests. Record any pending device-cycle check explicitly. Phase 3 then attaches generic bounded HTTP delivery to admitted matches; it must not send a live transition action until that mapping's real lifecycle is verified.
 
 ## Phase 3 — Single-camera generic HTTP forwarding
 

@@ -2,7 +2,7 @@
 
 This record contains generic verification results only. Keep personal configuration and device-identifying observations in ignored private local files.
 
-- Scope: diagnostic console prototype; not completion of every phase 1 gate in the product plan.
+- Status: phase 1 complete under the revised diagnostic/library-feasibility scope in IMPLEMENTATION_PLAN.md. Broader original checks were explicitly carried forward: real activation/reset validation to phase 2, restart recovery to phase 4, Linux/container targets to phase 8. This record does not claim those checks passed.
 - SDK: .NET 10.0.400; target `net10.0`.
 - Dependencies: SharpOnvifClient and SharpOnvifCommon 0.11.2.
 - Package source revision: `a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71`, from NuGet repository metadata. Reviewed SimpleOnvifClient, the console example, generated Events clients/data contracts and common notification contracts.
