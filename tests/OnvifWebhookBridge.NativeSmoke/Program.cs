@@ -2,6 +2,12 @@ using OnvifWebhookBridge.Tests.Onvif;
 using OnvifWebhookBridge.Tests.Persistence;
 using OnvifWebhookBridge.Tests.Web;
 
+if (args is ["--recorder"])
+{
+    await BrowserFixture.RunRecorder();
+    return 0;
+}
+
 if (args is ["--browser-fixture"])
 {
     await BrowserFixture.Run();
@@ -29,7 +35,10 @@ if (args.Length != 3)
 }
 try
 {
-    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+    // Emulation makes the unchanged 600,000-iteration password checks expensive.
+    // This is only the suite's overall watchdog; operation/cleanup deadlines stay unchanged.
+    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(
+        Environment.GetEnvironmentVariable("ONVIF_TEST_EMULATION") == "1" ? 30 : 5));
     StoragePath.Verify();
     await AuthenticationPath.Verify();
     await ExecutablePath.Verify(deadline.Token);

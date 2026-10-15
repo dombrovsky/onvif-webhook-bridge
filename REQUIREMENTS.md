@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Updated status: phases 1–7 generic implementation complete through SQLite persistence and authenticated Minimal API administration. Phase 7 adds plain browser administration; production deployment remains later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md and docs/ADMIN_VERIFICATION.md.
+Planning baseline: 2026-10-14. Updated status: phases 1–7 generic implementation complete through SQLite persistence and authenticated Minimal API administration. Phase 7 adds plain browser administration; Phase 8 adds production packaging, Compose, per-platform CI and release guidance; hardware/hosted-release gates remain explicit in docs/DEPLOYMENT_VERIFICATION.md. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md and docs/ADMIN_VERIFICATION.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, solution/build scaffold, health-only application shell, Dockerfile and simulator-backed tests. Phases 2–4 add generic normalization/history/matching, bounded HTTP delivery, independent camera workers and reconciliation. Phase 5 persists configuration and recoverable secrets with transactional migrations, masked reads and startup restoration. Phase 6 adds administrator bootstrap/offline reset, bounded sessions, CSRF/origin/login limits and authenticated configuration/status/event/test APIs. Phase 7 adds authenticated Cameras, Events and Rules screens with reviewed disabled drafts and explicit masked-secret editing; production deployment remains a future deliverable.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, solution/build scaffold, health-only application shell, Dockerfile and simulator-backed tests. Phases 2–4 add generic normalization/history/matching, bounded HTTP delivery, independent camera workers and reconciliation. Phase 5 persists configuration and recoverable secrets with transactional migrations, masked reads and startup restoration. Phase 6 adds administrator bootstrap/offline reset, bounded sessions, CSRF/origin/login limits and authenticated configuration/status/event/test APIs. Phase 7 adds authenticated Cameras, Events and Rules screens with reviewed disabled drafts and explicit masked-secret editing; phase 8 supplies Docker/Compose and release workflows with separate platform/hardware evidence in docs/DEPLOYMENT_VERIFICATION.md.
 
 ## Functional requirements
 

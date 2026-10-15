@@ -1,6 +1,6 @@
-# Linux x64 NativeAOT protocol verification using only disposable synthetic onvifsim.
+# Linux amd64/arm64 NativeAOT protocol verification using only disposable synthetic onvifsim.
 # Run from the repository root. Docker engine/image access is required.
-param([switch]$StorageOnly)
+param([switch]$StorageOnly, [ValidateSet("linux/amd64", "linux/arm64")][string]$Platform = "linux/amd64", [switch]$CrossCompile)
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path '.').Path
 $stage = Join-Path $repository ".local/phase7-native-source-$([Guid]::NewGuid().ToString('N'))"
@@ -48,10 +48,25 @@ ENV ONVIF_TEST_OWNERSHIP_FIXTURES=/ownership-fixtures ONVIF_TEST_BRIDGE_EXECUTAB
 USER $APP_UID
 ENTRYPOINT ["./OnvifWebhookBridge.NativeSmoke"]
 '@ | Set-Content -LiteralPath (Join-Path $stage 'Dockerfile')
-docker build --platform linux/amd64 --tag onvif-bridge-tests/phase7-native $stage
+$architecture = $Platform.Split('/')[-1]
+$rid = if ($architecture -eq 'amd64') { 'linux-x64' } else { 'linux-arm64' }
+$dockerfile = Join-Path $stage 'Dockerfile'
+if ($CrossCompile) {
+    if ($Platform -ne 'linux/arm64') { throw 'Cross compilation is only configured for arm64 on amd64.' }
+    docker build --platform linux/arm64 --target toolchain -t onvif-bridge-tests/toolchain:arm64 $repository
+    if ($LASTEXITCODE -ne 0) { throw 'Cross toolchain build failed.' }
+    $source = Get-Content $dockerfile -Raw
+    $source = $source.Replace('FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build', 'FROM onvif-bridge-tests/toolchain:arm64 AS build')
+    $source = $source.Replace('RUN apt-get update && apt-get install -y --no-install-recommends clang zlib1g-dev && rm -rf /var/lib/apt/lists/*', '')
+    Set-Content $dockerfile $source
+}
+(Get-Content $dockerfile -Raw).Replace('linux-x64', $rid) | Set-Content $dockerfile
+$testImage = "onvif-bridge-tests/phase7-native:$architecture"
+docker build --platform $Platform --tag $testImage $stage
 if ($LASTEXITCODE -ne 0) { throw 'Native test image build failed.' }
+if ($Platform -eq "linux/amd64") { docker tag $testImage onvif-bridge-tests/phase7-native }
 if ($StorageOnly) {
-    docker run --rm onvif-bridge-tests/phase7-native --storage-only
+    docker run --rm --platform $Platform $testImage --storage-only
     if ($LASTEXITCODE -ne 0) { throw "Native storage verification failed." }
     return
 }
@@ -63,7 +78,8 @@ try {
     $device = [UriBuilder]::new('http', [Net.IPAddress]::Loopback.ToString(), 8000, '/onvif/device_service').Uri.AbsoluteUri
     $control = [UriBuilder]::new('http', [Net.IPAddress]::Loopback.ToString(), 9000).Uri.AbsoluteUri
     $second = [UriBuilder]::new('http', [Net.IPAddress]::Loopback.ToString(), 8001, '/onvif/device_service').Uri.AbsoluteUri
-    docker run --rm --network "container:$simulator" onvif-bridge-tests/phase7-native $device $control $second
+    $emulation = if ($CrossCompile) { "1" } else { "0" }
+    docker run --rm --platform $Platform --env "ONVIF_TEST_EMULATION=$emulation" --network "container:$simulator" $testImage $device $control $second
     if ($LASTEXITCODE -ne 0) { throw 'Native simulator verification failed.' }
 }
 finally {

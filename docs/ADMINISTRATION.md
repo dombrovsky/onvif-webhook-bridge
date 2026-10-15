@@ -1,6 +1,6 @@
 # Administrator setup and phase 6 API
 
-The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` after successful startup. All data and administration routes require a session except same-origin login. Phase 7 adds only a public empty login shell at `/` and its fixed `/app.js` and `/app.css` assets. See [browser usage](BROWSER_ADMINISTRATION.md).
+The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` when its persistent configuration read succeeds after startup, or an empty 503 on storage failure; it does not depend on camera readiness. All data and administration routes require a session except same-origin login. Phase 7 adds only a public empty login shell at `/` and its fixed `/app.js` and `/app.css` assets. See [browser usage](BROWSER_ADMINISTRATION.md).
 
 ## Initial setup
 
@@ -29,7 +29,7 @@ Reset preserves cameras, rules, recoverable secrets and the configuration revisi
 
 Successful login returns `{"csrfToken":"<opaque-token>","expires":"<timestamp>"}` and a host-only `onvif-session` cookie with Path `/`, HttpOnly, SameSite=Strict and Secure when the application receives HTTPS. The session token and CSRF token are independent 256-bit cryptographically random values. Sessions expire absolutely after eight hours; activity does not extend expiry. At most 64 sessions exist; capacity rejects new logins instead of evicting an active session. Expired entries are reclaimed on access/login. Neither tokens nor sessions are persisted.
 
-Use HTTPS for credentials/session transport beyond a controlled local development connection. The app does not trust forwarded headers or proxy-provided client addresses. A proxy's TLS termination alone does not make a backend HTTP request HTTPS to this app; production proxy/HTTPS and deployment setup remain phase 8. Do not expose the development scaffold publicly or add arbitrary forwarded-header trust to obtain Secure cookies.
+Use HTTPS for credentials/session transport beyond a controlled local development connection. The app does not trust forwarded headers or proxy-provided client addresses. A proxy's TLS termination alone does not make a backend HTTP request HTTPS to this app; see [deployment usage](DEPLOYMENT.md) for a validated HTTPS-backend proxy arrangement that preserves this trust boundary. Do not expose the development scaffold publicly or add arbitrary forwarded-header trust to obtain Secure cookies.
 
 Login is bounded to five attempts per direct peer address and 20 globally per one-minute window, including successful attempts; at most 256 peer buckets and two concurrent password verifications exist. It returns 429 at capacity. Forwarded addresses cannot bypass the bound; peers behind a proxy share its quota. Invalid credentials receive a generic 401. There is no permanent account lockout. Request sizes and password lengths are checked before adaptive work.
 

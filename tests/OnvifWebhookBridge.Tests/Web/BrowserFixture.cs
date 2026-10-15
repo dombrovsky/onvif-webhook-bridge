@@ -9,10 +9,44 @@ namespace OnvifWebhookBridge.Tests.Web
     using OnvifWebhookBridge.Persistence;
     using OnvifWebhookBridge.Web;
     using System.Net;
+    using System.Security.Cryptography;
+    using System.Security.Cryptography.X509Certificates;
 
     // Explicit test-executable mode only; never registered in the production application.
     internal static class BrowserFixture
     {
+        public static async Task RunRecorder()
+        {
+            var count = 0;
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.Logging.ClearProviders();
+            using var key = RSA.Create(2048);
+            var request = new CertificateRequest("CN=Synthetic test CA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            using var ca = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            File.WriteAllText("/tmp/synthetic-ca.pem", ca.ExportCertificatePem());
+            using var serverKey = RSA.Create(2048);
+            var serverRequest = new CertificateRequest("CN=recorder", serverKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var names = new SubjectAlternativeNameBuilder();
+            names.AddDnsName("recorder");
+            serverRequest.CertificateExtensions.Add(names.Build());
+            using var signed = serverRequest.Create(ca, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddHours(1), RandomNumberGenerator.GetBytes(16));
+            using var certificate = signed.CopyWithPrivateKey(serverKey);
+            builder.WebHost.ConfigureKestrel(o =>
+            {
+                o.Listen(IPAddress.Any, 8081);
+                o.Listen(IPAddress.Any, 8443, endpoint => endpoint.UseHttps(certificate));
+            });
+            await using var app = builder.Build();
+            app.MapMethods("/synthetic", ["GET", "POST"], (HttpContext context) =>
+            {
+                Interlocked.Increment(ref count);
+                context.Response.StatusCode = 204;
+            });
+            app.MapGet("/count", () => Results.Text(Volatile.Read(ref count).ToString()));
+            await app.RunAsync();
+        }
+
         public static async Task Run()
         {
             var directory = Environment.GetEnvironmentVariable("ONVIF_BROWSER_DATA") ?? throw new InvalidOperationException();

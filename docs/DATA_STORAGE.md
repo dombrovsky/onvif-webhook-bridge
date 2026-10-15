@@ -1,6 +1,6 @@
 # Configuration storage
 
-Phase 5 stores configuration only. The executable uses `ONVIF_DATA_DIRECTORY`, defaulting to `/data` on Linux and `data` beside the executable on Windows. The directory contains `configuration.db` and SQLite WAL/SHM or rollback-journal sidecars. Do not point this setting at a shared/general-purpose directory: the application restricts the selected directory itself. Phase 6 exposes authenticated configuration, event, status and test APIs; `/health` is the sole anonymous API read. Administrator setup/reset and API protections are documented in [ADMINISTRATION.md](ADMINISTRATION.md). Phase 7 adds [plain browser administration](BROWSER_ADMINISTRATION.md) using these same protected APIs and durable edit contracts. Production deployment packaging remains later work.
+Phase 5 stores configuration only. The executable uses `ONVIF_DATA_DIRECTORY`, defaulting to `/data` on Linux and `data` beside the executable on Windows. The directory contains `configuration.db` and SQLite WAL/SHM or rollback-journal sidecars. Do not point this setting at a shared/general-purpose directory: the application restricts the selected directory itself. Phase 6 exposes authenticated configuration, event, status and test APIs; `/health` is the sole anonymous API read. Administrator setup/reset and API protections are documented in [ADMINISTRATION.md](ADMINISTRATION.md). Phase 7 adds [plain browser administration](BROWSER_ADMINISTRATION.md) using these same protected APIs and durable edit contracts. See [deployment usage](DEPLOYMENT.md) for phase 8 container ownership, volumes, upgrades and restore.
 
 ## Configuration contract
 
@@ -35,7 +35,7 @@ Pinned/resolved dependencies for this phase:
 | SQLite engine observed by the running JIT and Linux native tests | 3.53.3 |
 | Verified Linux native library | `SQLitePCLRaw.lib.e_sqlite3/2.1.13/runtimes/linux-x64/native/libe_sqlite3.so` |
 
-Microsoft documents that [Microsoft.Data.Sqlite initializes its bundled SQLitePCLRaw dependency](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions). The package baseline is [Microsoft.Data.Sqlite 10.0.13](https://www.nuget.org/packages/Microsoft.Data.Sqlite/10.0.13); actual NativeAOT loading evidence is in [the phase 5 handoff](PERSISTENCE_VERIFICATION.md). No ORM or system SQLite fallback is used. Linux arm64 assets/runtime remain unverified; this phase claims Linux x64 only.
+Microsoft documents that [Microsoft.Data.Sqlite initializes its bundled SQLitePCLRaw dependency](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions). The package baseline is [Microsoft.Data.Sqlite 10.0.13](https://www.nuget.org/packages/Microsoft.Data.Sqlite/10.0.13); actual NativeAOT loading evidence is in [the phase 5 handoff](PERSISTENCE_VERIFICATION.md). No ORM or system SQLite fallback is used. The phase 5 evidence claims Linux x64 only. Phase 8 separately tests linux-arm64 assets/execution under emulation; consult [deployment evidence](DEPLOYMENT_VERIFICATION.md) for the current gate status and pending native hardware.
 
 ## Ownership, permissions and failures
 

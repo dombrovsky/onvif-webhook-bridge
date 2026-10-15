@@ -1,0 +1,60 @@
+name: Release images
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+  platform:
+    needs: verify
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image-${{ matrix.arch }}
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified image
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}"
+          docker load -i "image-$ARCH.tar"
+          docker tag onvif-webhook-bridge:verify "$image:$VERSION-$ARCH"
+          docker push "$image:$VERSION-$ARCH"
+  manifest:
+    needs: platform
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble platform manifest
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}"
+          docker buildx imagetools create -t "$image:$VERSION" "$image:$VERSION-amd64" "$image:$VERSION-arm64"
+          docker buildx imagetools inspect "$image:$VERSION"
+          docker buildx imagetools inspect "$image:$VERSION" --raw | jq -e '[.manifests[] | select(.platform.os != "unknown") | .platform.os + "/" + .platform.architecture] | sort == ["linux/amd64", "linux/arm64"]'

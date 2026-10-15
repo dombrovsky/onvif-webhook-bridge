@@ -74,7 +74,18 @@ namespace OnvifWebhookBridge.Web
                 catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
                 catch (Exception) { await Error(context, 500, "InternalError", "The operation could not be completed."); }
             });
-            app.MapGet("/health", () => Results.Text("Healthy"));
+            app.MapGet("/health", (ConfigurationStore store) =>
+            {
+                try
+                {
+                    store.Read();
+                    return Results.Text("Healthy");
+                }
+                catch (StorageException)
+                {
+                    return Results.StatusCode(503);
+                }
+            });
             app.MapPost("/api/login", async (HttpContext c, AdminAuthentication auth) =>
             {
                 var request = await Body<LoginRequest>(c);

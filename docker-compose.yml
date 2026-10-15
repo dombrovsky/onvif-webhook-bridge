@@ -1,0 +1,33 @@
+services:
+  bridge:
+    image: ${ONVIF_IMAGE:-onvif-webhook-bridge:local}
+    build:
+      context: .
+    restart: unless-stopped
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    environment:
+      ASPNETCORE_HTTP_PORTS: ${ONVIF_CONTAINER_PORT:-8080}
+      ONVIF_DATA_DIRECTORY: /data
+      ONVIF_ADMIN_USERNAME: ${ONVIF_ADMIN_USERNAME:?Set the administrator name locally}
+      ONVIF_ADMIN_PASSWORD_FILE: /run/secrets/administrator_password
+    ports:
+      - "${ONVIF_BIND_ADDRESS:-127.0.0.1}:${ONVIF_PUBLISHED_PORT:-8080}:${ONVIF_CONTAINER_PORT:-8080}"
+    volumes:
+      - bridge-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    secrets:
+      - administrator_password
+    networks: [bridge]
+secrets:
+  administrator_password:
+    file: ${ONVIF_ADMIN_PASSWORD_PATH:?Set a private readable password file path}
+volumes:
+  bridge-data:
+networks:
+  bridge:
+    driver: bridge

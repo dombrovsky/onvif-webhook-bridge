@@ -1,13 +1,13 @@
 # ONVIF Webhook Bridge
 
-Incremental .NET 10 NativeAOT bridge with a standalone diagnostic probe, generic normalization/history/matching, HTTP forwarding, multiple-camera supervision, SQLite configuration persistence, authenticated Minimal APIs and phase 7 plain browser administration. Startup requires administrator setup; configuration changes commit through the store before active snapshots change. Open the root URL after administrator setup for Cameras, Events and Rules; see [browser usage](docs/BROWSER_ADMINISTRATION.md) and [phase 7 evidence](docs/BROWSER_VERIFICATION.md). See [administrator setup/reset and API contract](docs/ADMINISTRATION.md), [phase 6 verification](docs/ADMIN_VERIFICATION.md), [storage usage and permissions](docs/DATA_STORAGE.md), [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [lifecycle contracts](docs/LIFECYCLE_VERIFICATION.md).
+Incremental .NET 10 NativeAOT bridge with a standalone diagnostic probe, generic normalization/history/matching, HTTP forwarding, multiple-camera supervision, SQLite configuration persistence, authenticated Minimal APIs and plain browser administration, with phase 8 Docker/Compose packaging and release workflows. Startup requires administrator setup; configuration changes commit through the store before active snapshots change. Open the root URL after administrator setup for Cameras, Events and Rules; see [browser usage](docs/BROWSER_ADMINISTRATION.md) and [phase 7 evidence](docs/BROWSER_VERIFICATION.md). See [administrator setup/reset and API contract](docs/ADMINISTRATION.md), [phase 6 verification](docs/ADMIN_VERIFICATION.md), [storage usage and permissions](docs/DATA_STORAGE.md), [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [lifecycle contracts](docs/LIFECYCLE_VERIFICATION.md).
 
 ## Structure and build
 
 ```text
 OnvifWebhookBridge.slnx
 Directory.Build.props / Directory.Build.targets / .editorconfig
-Dockerfile / .dockerignore
+Dockerfile / .dockerignore / docker-compose.yml / .env.example
 src/
   OnvifWebhookBridge/              Application and shared ONVIF adapter
   OnvifProbe/                      Standalone diagnostic console
@@ -33,17 +33,23 @@ dotnet test OnvifWebhookBridge.slnx --no-build
 
 The script builds [onvifsim's upstream Dockerfile](https://github.com/mrtian2016/onvifsim/blob/8f86706c2ba768006e85b38f6bc1c760d36f1bba/packaging/docker/Dockerfile) at the pinned commit. Testcontainers starts a disposable simulator, uses random host ports, loads a generic synthetic camera scenario with fake credentials and mapped advertised addresses, subscribes, renews, triggers true/false notifications through its control API, pulls both states and unsubscribes. No physical camera or destination is contacted. Containers are disposed automatically; the image remains cached. Add `--no-cache --pull` to the script's Docker build command when intentionally refreshing the upstream base/OS packages, then rerun the tests.
 
-Run `./tests/Verify-Phase7Native.ps1` for the Linux x64 NativeAOT checks through phase 7. It retains the protocol, matching, GET/POST recorder, overload/redaction and two-camera fault/recovery/cleanup regressions, and adds SQLite transactions/migrations/secret handling, actual Linux ownership/modes, backup/restore and persisted restart reconciliation to a local recorder. It also publishes/runs the production executable for offline reset, fail-closed startup and authenticated JSON, and runs bounded-session/CSRF/validation tests plus authenticated API-driven onvifsim reconciliation and recorder delivery. `-StorageOnly` runs storage and security/executable checks without onvifsim. Historical Phase2/Phase4/Phase5/Phase6 scripts delegate to this runner. It builds a test-only image from an explicit source allowlist under ignored `.local/` and removes disposable fixture containers. It requires Linux amd64 Docker; arm64 and physical-device interoperability remain unverified. See [phase 2 contracts](docs/PHASE2_VERIFICATION.md) for truncation/transition limits. Real activation/reset mappings and outage/recovery remain pending.
+Run `./tests/Verify-Phase7Native.ps1` for the Linux x64 NativeAOT checks through phase 7. It retains the protocol, matching, GET/POST recorder, overload/redaction and two-camera fault/recovery/cleanup regressions, and adds SQLite transactions/migrations/secret handling, actual Linux ownership/modes, backup/restore and persisted restart reconciliation to a local recorder. It also publishes/runs the production executable for offline reset, fail-closed startup and authenticated JSON, and runs bounded-session/CSRF/validation tests plus authenticated API-driven onvifsim reconciliation and recorder delivery. `-StorageOnly` runs storage and security/executable checks without onvifsim. Historical Phase2/Phase4/Phase5/Phase6 scripts delegate to this runner. It builds a test-only image from an explicit source allowlist under ignored `.local/` and removes disposable fixture containers. It accepts `-Platform linux/amd64` or `-Platform linux/arm64`; native platform runners are preferred. Local amd64 hosts can use `-Platform linux/arm64 -CrossCompile` and must label execution as emulation. Physical-device interoperability remains pending; see [phase 8 evidence](docs/DEPLOYMENT_VERIFICATION.md). See [phase 2 contracts](docs/PHASE2_VERIFICATION.md) for truncation/transition limits. Real activation/reset mappings and outage/recovery remain pending.
 
 Run `./tests/Verify-Phase7Browser.ps1 -PlaywrightModule <installed-playwright-module>` after native verification for the automated Edge walkthrough against actual native APIs, onvifsim and a local recorder. Playwright and Node are external test tools only; the application has no frontend packages or build step. See [browser evidence](docs/BROWSER_VERIFICATION.md) for prerequisites and scope.
 
-Build the application image from the repository root:
+Production Docker packaging and Compose are available for Linux amd64 and arm64. See [deployment and release usage](docs/DEPLOYMENT.md) for administrator password-file setup, loopback-default ports, HTTPS proxy/backend trust, private volume ownership, backup/restore, upgrades and troubleshooting. See [phase 8 evidence and open platform/hardware gates](docs/DEPLOYMENT_VERIFICATION.md) before choosing a deployment target. ARMv7 is conditional and excluded; Linux 32-bit x86 is unsupported.
 
-```powershell
-docker build -t onvif-webhook-bridge:scaffold .
+Copy `.env.example` to ignored `.env`, replace its administrator/password-file placeholders locally, then run:
+
+```sh
+docker compose config --quiet
+docker compose build
+docker compose up -d
 ```
 
-This remains a development scaffold on port 8080, with authenticated administration/event APIs and plain browser administration. Administrator setup is required; see [the setup/reset policy](docs/ADMINISTRATION.md). Runtime now requires a correctly owned writable data directory (Linux default `/data`; see [storage documentation](docs/DATA_STORAGE.md)); the existing Dockerfile does not provision a production volume. It publishes NativeAOT for the builder's Linux architecture and runs as the non-root account. Base image manifests are digest-pinned; automated checks cover linux/amd64. Production deployment, Compose, health probes and multi-platform verification remain later work. Historical scaffold evidence is in [scaffold verification](docs/SCAFFOLD_VERIFICATION.md).
+No default credentials exist. The image runs as UID/GID 1654, creates private `/data`, includes a bounded built-in health probe and uses the existing NativeAOT application. Compose adds a named volume, bridge network, read-only root, bounded tmpfs and graceful stop. Camera outages remain separate from process/storage health. No real deployment or publication is implied by local test evidence. Creating mappings, transition baselines, cooldown and duplicate effects from opt-in retries are covered in [browser usage](docs/BROWSER_ADMINISTRATION.md) and [deployment guidance](docs/DEPLOYMENT.md).
+
+CI verifies native per-platform builds and simulator/local-recorder paths without registry credentials on PRs. Trusted version tags can publish verified platform artifacts to GHCR and assemble a manifest. This implementation session does not push or publish images.
 
 ## Diagnostic probe
 

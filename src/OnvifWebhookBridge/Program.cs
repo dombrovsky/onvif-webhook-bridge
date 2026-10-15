@@ -2,7 +2,14 @@ using OnvifWebhookBridge.Dispatch;
 using OnvifWebhookBridge.Persistence;
 using OnvifWebhookBridge.Web;
 
+if (args is ["--health-probe"])
+{
+    Environment.ExitCode = await HealthProbe.Run(Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"));
+    return;
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
+builder.WebHost.UseKestrelHttpsConfiguration();
 // Request diagnostics can contain configured addresses. Add safe logging per feature.
 builder.Logging.ClearProviders();
 builder.Services.AddPersistentCameraPipeline(Environment.GetEnvironmentVariable("ONVIF_DATA_DIRECTORY") ??
