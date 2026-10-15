@@ -1,7 +1,7 @@
 # Disposable production-image verification. No camera or external action addresses accepted.
 param([string]$Image = 'onvif-webhook-bridge:local',
     [ValidateSet('linux/amd64','linux/arm64')][string]$Platform = 'linux/amd64',
-    [int]$SoakSeconds = 120, [string]$PlaywrightModule)
+    [ValidateRange(1,3600)][int]$SoakSeconds = 120, [string]$PlaywrightModule)
 $ErrorActionPreference = 'Stop'
 $dockerExecutable = (Get-Command docker -CommandType Application | Select-Object -First 1).Source
 function Docker {
@@ -94,7 +94,25 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Production browser walkthrough failed.' }
     }
     $until = [DateTime]::UtcNow.AddSeconds($SoakSeconds)
-    while ([DateTime]::UtcNow -lt $until) { Trigger 0; Trigger 1; Docker exec $app ./OnvifWebhookBridge --health-probe | Out-Null; Start-Sleep -Seconds 5 }
+    $cycles = 0
+    while ([DateTime]::UtcNow -lt $until) {
+        foreach ($index in 0..1) {
+            $before = [int](Invoke-RestMethod "$recorder/count")
+            $previous = Api GET /api/executions | Where-Object ruleId -eq "synthetic-$index" | Select-Object -ExpandProperty jobId
+            Trigger $index
+            Wait-Until {
+                $completed = @(Api GET /api/executions | Where-Object {
+                    $_.ruleId -eq "synthetic-$index" -and $_.jobId -ne $previous -and $_.result -eq 2 -and $_.statusCode -eq 204
+                })
+                $completed.Count -eq 1 -and [int](Invoke-RestMethod "$recorder/count") -ge $before+1
+            } "soak delivery from camera $index"
+        }
+        Check (@(Api GET /api/camera-status | Where-Object state -eq Subscribed).Count -eq 2) 'soak subscriptions'
+        Docker exec $app ./OnvifWebhookBridge --health-probe | Out-Null
+        $cycles++
+        Start-Sleep -Seconds 5
+    }
+    Write-Output "Verified soak cycles with delivery from each camera: $cycles"
     $cfg = Api GET /api/configuration
     Api PUT /api/rules/synthetic-tls @{revision=$cfg.revision;name='Synthetic TLS';cameraId='synthetic-0';topic='Synthetic/TLS';enabled=$false;url=@{operation=1;value='https://recorder:8443/synthetic'}} | Out-Null
     Api POST /api/rules/synthetic-tls/test | Out-Null

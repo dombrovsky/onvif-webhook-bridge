@@ -4,6 +4,10 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+# Keep shared platform tags and manifest assembly within one verified run.
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml

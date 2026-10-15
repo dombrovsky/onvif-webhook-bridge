@@ -201,6 +201,8 @@ Phase 3 admission decision (2026-10-15): apply a 25-pending-job per-rule quota w
 
 **Status: generic implementation complete; required local automated gates passed.** Native-hardware, real-device and hosted-release verification are distinct gates in [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md). ARMv7 is excluded: base and SQLite assets exist, but the evaluated toolchain lacks the ARMv7 linker/sysroot and no ARMv7 hardware smoke check is available. No stack broadening or runtime fallback is authorized.
 
+The authorized phase 8 hardening review is complete: it bounds health-response bytes, isolates Compose fixtures, strengthens continued two-camera delivery and changed-password reset verification, and serializes release runs for the same tag. Final local gates passed: 76 tests with no failures/skips, amd64 and emulated ARM64 NativeAOT, Compose/TLS/browser checks, and ten-minute rule-specific delivery runs (114 amd64 / 94 emulated ARM64 cycles). The original completion evidence remains historical; final review results are tracked separately in [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md). No later phase or product feature is introduced, and external gates remain pending.
+
 **Test maintenance gate:** add/update/remove container, deployment and workflow verification as build/runtime behaviour changes; satisfy the shared passing gate on each claimed supported target before completion, labelling emulation and pending hardware separately.
 
 **Dependencies:** phases 1–7; NativeAOT/SQLite/auth verification already available.

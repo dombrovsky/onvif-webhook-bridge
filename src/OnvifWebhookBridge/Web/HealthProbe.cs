@@ -13,9 +13,14 @@ namespace OnvifWebhookBridge.Web
             try
             {
                 using var handler = new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false };
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
+                using var client = new HttpClient(handler)
+                {
+                    Timeout = TimeSpan.FromSeconds(4),
+                    MaxResponseContentBufferSize = 7
+                };
                 using var response = await client.GetAsync(new UriBuilder("http", IPAddress.Loopback.ToString(), port, "/health").Uri);
-                return response.StatusCode == HttpStatusCode.OK && await response.Content.ReadAsStringAsync() == "Healthy" ? 0 : 1;
+                return response.StatusCode == HttpStatusCode.OK &&
+                    (await response.Content.ReadAsByteArrayAsync()).AsSpan().SequenceEqual("Healthy"u8) ? 0 : 1;
             }
             catch (Exception)
             {

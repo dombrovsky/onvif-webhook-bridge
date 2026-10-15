@@ -10,6 +10,9 @@ namespace OnvifWebhookBridge.Tests.Web
     public sealed class HealthTests
     {
         [Fact, Trait("Category", "Unit")]
+        public Task ProbeBoundsStreamedResponsesAndRejectsRedirectsAndFailures() => HealthPath.Verify(CancellationToken.None);
+
+        [Fact, Trait("Category", "Unit")]
         public async Task ProbeUsesConfiguredPortAndFailsClosedWithoutStorage()
         {
             using var data = new TemporaryStorage();
