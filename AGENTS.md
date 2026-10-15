@@ -1,5 +1,10 @@
 # Coding-agent instructions
 
+## Code formatting
+
+- For C# changes, follow the applicable `.editorconfig`: use braces for control-flow statements, put opening braces on their own lines, and keep statements on separate lines.
+- Before committing, run `dotnet format whitespace OnvifWebhookBridge.slnx` to apply formatting, then run `dotnet format whitespace OnvifWebhookBridge.slnx --verify-no-changes` to confirm no formatting differences remain.
+
 ## Current repository state and authorization
 
 Phase 1 is complete under the revised diagnostic/library-feasibility scope in IMPLEMENTATION_PLAN.md. The console probe in `src/OnvifProbe/` uses SharpOnvifClient 0.11.2; retain its shared WS-Addressing renewal adapter and regression tests. Subsequent authorization produced the scaffold, phase 2 normalization/history/matching/admission, phase 3 HTTP forwarding/manual test services and phase 4 multiple-camera supervision/resilient lifecycle. Phase 5 was explicitly authorized and delivers transactional SQLite configuration persistence, secret edits/masked reads, administrator bootstrap-hash storage and startup restoration. See `docs/PHASE2_VERIFICATION.md`, `docs/HTTP_VERIFICATION.md`, `docs/LIFECYCLE_VERIFICATION.md`, `docs/PERSISTENCE_VERIFICATION.md` and `docs/DATA_STORAGE.md` for evidence, contracts and pending real-device activation/reset/outage checks. Phase 6 was explicitly authorized and adds authenticated Minimal API administration, environment/password-file bootstrap, offline reset, bounded sessions/throttling and CSRF/origin protections; see docs/ADMIN_VERIFICATION.md and docs/ADMINISTRATION.md. No phase 7 or later implementation is authorized. Do not begin browser UI, deployment, Compose, workflows or TaskFlow adoption without further authorization. Local camera deployment was cancelled; automated Docker verification only is authorized.
