@@ -1,0 +1,4 @@
+# Match .editorconfig on every checkout, independently of core.autocrlf.
+* text=auto eol=crlf
+
+Dockerfile text eol=lf
