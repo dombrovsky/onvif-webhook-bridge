@@ -19,3 +19,5 @@ This record contains generic verification results only. Keep personal configurat
 - NativeAOT and trimming: the user reports successful verification with the library. This is user-verified evidence, not a publish/runtime test performed by this agent. Target architecture, operating system, publish arguments and exercised runtime paths were not supplied; Linux/container and per-architecture verification remain separate future checks.
 
 Reproduce build and hardware checks using README.md. The synthetic regression service is a test script, not a runtime dependency. Private configuration and development artifacts remain ignored. No camera configuration changes were made.
+
+The subsequent project scaffold moved the probe to `src/OnvifProbe/` and shared its existing renewal adapter with the application. The console regression passed after the move. Separate scaffold, native health-shell and simulator checks are tracked in [SCAFFOLD_VERIFICATION.md](SCAFFOLD_VERIFICATION.md); they do not replace the historical device evidence above.

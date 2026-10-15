@@ -6,3 +6,7 @@
 **/Properties/launchSettings.json
 
 .vs/
+.idea/
+**/TestResults/
+*.user
+*.suo

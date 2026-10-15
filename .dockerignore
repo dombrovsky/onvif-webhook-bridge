@@ -1,0 +1,16 @@
+# Allow only the build inputs; private configuration never enters the context.
+**
+!Directory.Build.props
+!Directory.Build.targets
+!src/
+!src/OnvifWebhookBridge/
+!src/OnvifWebhookBridge/**
+**/bin/
+**/obj/
+**/Properties/
+**/.local/
+**/*.local.*
+**/.env*
+**/*.db*
+**/*.sqlite*
+**/*.log

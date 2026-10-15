@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated after prototype verification. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phase 2 is the next coding session; phases 2–8 are not implemented. Each phase remains independently reviewable. Future file names are proposed locations; existing prototype files are listed in phase 1.
+Planning baseline: 2026-10-14; updated after prototype verification and the separately authorized project scaffold. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. The solution, build conventions, health-only application shell, Dockerfile and focused simulator test now exist. Phases 2–8 remain future product work; the scaffold does not complete their acceptance criteria. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -39,7 +39,11 @@ Destinations receive ordinary configured HTTP actions. No vendor API contract is
 
 ## Minimal implementation shape
 
-One production project `src/OnvifWebhookBridge/`, one test project `tests/OnvifWebhookBridge.Tests/`, and a temporary focused observation tool `tools/OnvifProbe/`. Keep production components as concrete small classes grouped into `Onvif/`, `Events/`, `Rules/`, `Dispatch/`, `Persistence/`, and `Web/`. Use interfaces only at genuinely testable external seams (camera transport, clock, persistence if needed); no generic repositories, domain framework, internal broker, or plugin abstraction.
+One production project `src/OnvifWebhookBridge/`, one test project `tests/OnvifWebhookBridge.Tests/`, and a focused observation tool `src/OnvifProbe/`, all in `OnvifWebhookBridge.slnx`. The probe remains a standalone console application. Its renewal adapter is shared as a linked source file from the production project without taking an ASP.NET dependency. Keep future production components as concrete small classes grouped into `Onvif/`, `Events/`, `Rules/`, `Dispatch/`, `Persistence/`, and `Web/`; create folders only when needed. Use interfaces only at genuinely testable external seams; no generic repositories, domain framework, internal broker, or plugin abstraction.
+
+### Authorized scaffold before phase 2
+
+The user separately requested basic project organization, shared build/style conventions, a Dockerfile targeting the application project, and a simple simulator test. Source projects now live under `src/`; tests under `tests/`. Shared props provide .NET 10/C# 14, nullable references, deterministic compilation and warnings as errors; shared targets remain an empty extension point. The application is a NativeAOT Minimal API shell exposing only `/health`; no administration, camera workers or forwarding are wired up. The Dockerfile is an early scaffold, not phase 8 deployment completion. See `docs/SCAFFOLD_VERIFICATION.md` for exact checks and limits.
 
 Flow: per-camera pull → normalize → bounded inspector history → matcher/state/cooldown → bounded dispatch admission → independent HTTP execution/status. Persistence provides configuration snapshots; it never sits in the polling hot path. Immutable configuration revisions invalidate obsolete queued actions. Use DI, hosted services, HttpClientFactory, direct SQL, and simple polling UI. Add only components required by the current phase.
 
@@ -51,7 +55,19 @@ Unit tests may use simulated request/response objects, in-memory transports, syn
 
 The simulator verifies protocol and application integration against its implementation only. It does not prove a physical device's topic/schema, firmware behaviour, or real camera recovery. Keep any explicitly required physical-device checks separately labelled and pending when unavailable.
 
+## Test maintenance and passing gate for every step
+
+Apply this gate to every implementation step within every phase, including changes to the existing scaffold and diagnostic probe:
+
+- Review the changed behaviour and affected acceptance criteria. Add meaningful tests for new behaviour and regressions; update tests and fixtures when an intended contract changes; remove obsolete tests only when their behaviour is intentionally removed or equivalent coverage replaces them. Record why coverage was changed or removed. Do not delete, weaken, skip or suppress a test merely to make a failure disappear.
+- Keep test changes in the same scoped change as the implementation. Test observable behaviour and failure boundaries rather than duplicating implementation details. A documentation-only change needs review of references and commands, not an artificial code test.
+- Run focused tests while developing. Before completing the step, run a clean solution build, the full automated unit/integration suite for the implemented scope, and any affected console, browser, container or published-NativeAOT checks specified by the phase. Keep existing probe and renewal regression coverage passing. Run against the final code and fixtures; rerun affected checks after further changes.
+- Required automated checks must pass with no unexplained failures or skipped required coverage. Fix regressions before marking the step complete. An unavailable prerequisite is a pending check, not a pass; record the blocker and leave the affected completion gate open. Do not substitute unit doubles for required onvifsim integration coverage or JIT results for required native runtime checks.
+- Record test additions, updates and removals, commands, pass/fail/skip counts, runtime/target and any pending checks in the phase's evidence/handoff record. Distinguish automated simulator results from physical-device checks. Missing hardware may leave a real mapping or hardware gate pending under the phase's exit rules; it does not prevent honestly reporting completed generic work.
+
 ## Phase 1 — End-to-end ONVIF observation and NativeAOT feasibility
+
+**Test maintenance gate:** apply the shared gate whenever the completed probe or shared renewal adapter changes; maintain preservation/recovery and WS-Addressing regression tests and rerun the affected simulator/native checks. Historical evidence below is not a new test run.
 
 **Status: complete — diagnostic and library feasibility.** Closure uses the focused prototype scope requested after the original plan. It does not claim every original production-interoperability check passed. Remaining checks are assigned below rather than silently marked verified.
 
@@ -59,7 +75,7 @@ The simulator verifies protocol and application integration against its implemen
 
 **Completed scope:** one-camera console probe using actual SimpleOnvifClient APIs; service discovery; unfiltered PullPoint subscribe/pull; complete exposed message-tree/raw XML output; renewal with WS-Addressing compatibility fix; delayed reconnect/resubscribe; Ctrl+C and bounded unsubscribe/disposal. No forwarding, UI, database or production multi-camera system.
 
-**Delivered files:** `tools/OnvifProbe/{OnvifProbe.csproj,Program.cs}`, `tests/OnvifProbe.Smoke.ps1`, `README.md`, `.gitignore`, and `docs/ONVIF_OBSERVATIONS.md`. Private launch profiles/configuration remain ignored.
+**Delivered files:** `src/OnvifProbe/{OnvifProbe.csproj,Program.cs}`, `tests/OnvifProbe.Smoke.ps1`, `README.md`, `.gitignore`, and `docs/ONVIF_OBSERVATIONS.md`. Private launch profiles/configuration remain ignored.
 
 **Acceptance evidence:**
 
@@ -73,6 +89,8 @@ The simulator verifies protocol and application integration against its implemen
 **Handoff:** the library choice and basic event path are proven enough to proceed. Preserve the observer as a diagnostic tool, reuse its proven subscription/renewal approach, and avoid another transport rewrite or package upgrade without a concrete reason.
 
 ## Phase 2 — Normalized events and deterministic rule matching
+
+**Test maintenance gate:** add/update/remove normalization, history, matching and admission tests with each behaviour change; the shared passing gate and phase-specific verification below are required before completion.
 
 **Status: next focused coding session.** Goal: turn observed notifications into testable, vendor-independent rule decisions. HTTP actions remain phase 3 so matching can be verified without triggering external services.
 
@@ -97,6 +115,8 @@ The simulator verifies protocol and application integration against its implemen
 
 ## Phase 3 — Single-camera generic HTTP forwarding
 
+**Test maintenance gate:** add/update/remove dispatch, queue, retry and redaction tests with each behaviour change, and maintain the onvifsim-to-local-recorder integration path; satisfy the shared passing gate before completion.
+
 **Dependencies:** phases 1–2.
 
 **Exact scope:** connect the proven one-camera pipeline to HttpClientFactory dispatch with an in-memory rule configuration, bounded queue/concurrency, manual test service and execution status. No UI or SQLite yet; private test configuration stays ignored.
@@ -108,6 +128,8 @@ The simulator verifies protocol and application integration against its implemen
 **Tests/verification:** unit tests may use a fake handler for request construction, headers isolated across destinations, response disposal, 2xx/4xx/5xx/408/429, Retry-After cap, timeout/transport cancellation, zero/two additional attempts, duplicate-effect caveat, overflow, per-rule serialization and fairness. Integration tests must use onvifsim to generate notifications and a local HTTP capture endpoint to verify end-to-end dispatch. Capture logs containing deliberately seeded fake secrets and assert absence. A real external destination action is optional and must be separately authorized; HTTP status alone does not verify destination-side effect.
 
 ## Phase 4 — Multiple independent cameras and resilient lifecycle
+
+**Test maintenance gate:** add/update/remove lifecycle, renewal, reconciliation and failure-isolation tests with each behaviour change, including simulator fault/recovery scenarios; satisfy the shared passing gate before completion.
 
 **Dependencies:** phases 1–3; reuse rather than rewrite the proven subscription path.
 
@@ -121,6 +143,8 @@ The simulator verifies protocol and application integration against its implemen
 
 ## Phase 5 — SQLite configuration persistence
 
+**Test maintenance gate:** add/update/remove persistence, migration, secret-handling and restart tests with each schema or behaviour change; satisfy the shared passing gate, including affected native SQLite checks, before completion.
+
 **Dependencies:** phases 2–4 configuration and reconciliation contracts.
 
 **Exact scope:** persist cameras/rules/schema and administrator bootstrap credential hash with direct SQL, transactions and masked secret DTOs. Add startup load and migration handling; no browser UI. Validate SQLite in an AOT executable now rather than waiting for packaging.
@@ -132,6 +156,8 @@ The simulator verifies protocol and application integration against its implemen
 **Tests/verification:** temporary DB round-trip, migrations from an earlier schema, rollback, foreign keys, simultaneous edits/revision conflict, explicit secret preserve/replace/clear, invalid configuration, backup/restore and AOT native SQLite loading may be unit/storage tests with simulated data. Integration tests for restart reconciliation with active cameras/rules must use onvifsim. Verify actual Linux file modes; Windows ACL behaviour is not evidence for container modes.
 
 ## Phase 6 — Authenticated Minimal API administration
+
+**Test maintenance gate:** add/update/remove API, authentication, authorization, CSRF and redaction tests with each endpoint or security-contract change; satisfy the shared passing gate, including affected native API checks, before completion.
 
 **Dependencies:** phases 3–5.
 
@@ -145,6 +171,8 @@ The simulator verifies protocol and application integration against its implemen
 
 ## Phase 7 — Minimal browser screens
 
+**Test maintenance gate:** add/update/remove focused browser/security tests and walkthrough cases as UI flows change; run the affected walkthroughs and automated regressions under the shared passing gate before completion.
+
 **Dependencies:** phase 6 and earlier pipeline.
 
 **Exact scope:** plain static HTML/CSS/JavaScript for Cameras, Events and Rules; login/logout; lightweight refresh; rule-from-event draft; test actions and safe feedback. No bundler or frontend package manager.
@@ -156,6 +184,8 @@ The simulator verifies protocol and application integration against its implemen
 **Tests/verification:** browser walkthrough CRUD/test/connectivity/disconnected status, multiple matching rules, false/unmatched/Initialized display, create/edit draft and secret clear, server restart, login/session expiry, and inert rendering of injected HTML/script in event/name fields. Integration walkthroughs must source events from onvifsim; repeat native full-path smoke test, not just a development server preview.
 
 ## Phase 8 — Docker, Compose, multi-platform CI and release guide
+
+**Test maintenance gate:** add/update/remove container, deployment and workflow verification as build/runtime behaviour changes; satisfy the shared passing gate on each claimed supported target before completion, labelling emulation and pending hardware separately.
 
 **Dependencies:** phases 1–7; NativeAOT/SQLite/auth verification already available.
 
@@ -171,4 +201,4 @@ README must explain how to create mappings from observed notifications, syntheti
 
 ## Session handoff and completion rules
 
-For each phase, record scope completed, files changed, commands/results, real versus simulated verification, package/runtime versions, open issues, and the next phase's inputs. Commit only the scoped phase; do not mark acceptance items passed without evidence. Missing hardware means pending hardware checks, not successful interoperability. An actual dependency incompatibility requires updating this plan with a concrete option and decision before broadening the stack.
+For each phase and implementation step, enforce the shared test maintenance and passing gate above. Record scope completed, files changed, tests added/updated/removed with reasons, commands/results and pass/fail/skip counts, real versus simulated verification, package/runtime versions, open gates, and the next phase's inputs. Commit only the scoped work with its corresponding test changes; do not mark acceptance items passed without evidence or a step complete while required automated checks remain failing or unrun. Missing hardware means pending hardware checks, not successful interoperability. An actual dependency incompatibility requires updating this plan with a concrete option and decision before broadening the stack.

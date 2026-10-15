@@ -1,11 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="SharpOnvifClient" Version="0.11.2" />
+    <!-- Share the proven adapter without coupling the console tool to ASP.NET. -->
+    <Compile Include="../OnvifWebhookBridge/Onvif/AddressedAuthentication.cs" Link="Onvif/AddressedAuthentication.cs" />
   </ItemGroup>
 </Project>

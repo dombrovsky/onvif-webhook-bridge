@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test. The full bridge, UI, persistence, HTTP dispatcher and Docker deployment remain future deliverables; completing the probe does not authorize implementing all of them at once.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. The full bridge, UI, persistence, HTTP dispatcher and production Docker deployment remain future deliverables; the scaffold does not implement their requirements.
 
 ## Functional requirements
 

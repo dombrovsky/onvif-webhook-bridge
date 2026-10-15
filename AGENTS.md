@@ -2,9 +2,9 @@
 
 ## Current repository state and authorization
 
-Phase 1 is complete under the revised diagnostic/library-feasibility scope in IMPLEMENTATION_PLAN.md. The committed console probe in `tools/OnvifProbe/` uses SharpOnvifClient 0.11.2; real subscription/renewal/shutdown and synthetic preservation/recovery tests passed, and the user reports NativeAOT/trimming verification. Retain the WS-Addressing renewal adapter and regression test. Current authorization is to update the plan and evidence; phase 2 is the next coding session, not automatically authorized by this planning update. Do not begin the UI, persistence, dispatch, Docker/Compose or workflows.
+Phase 1 is complete under the revised diagnostic/library-feasibility scope in IMPLEMENTATION_PLAN.md. The console probe in `src/OnvifProbe/` uses SharpOnvifClient 0.11.2; real subscription/renewal/shutdown and synthetic preservation/recovery tests passed, and the user reports NativeAOT/trimming verification. Retain the shared WS-Addressing renewal adapter and regression tests. A subsequent user request authorizes the solution/build scaffold, application project with Dockerfile, and simple simulator-backed test. This does not authorize implementing phase 2 or the remaining product. Do not begin the UI, normalization/matching, persistence, dispatch, Compose or workflows without further authorization.
 
-When a later user explicitly authorizes more implementation, work on the requested phase of `IMPLEMENTATION_PLAN.md`. That instruction supersedes the current documentation-only authorization. Read both planning documents before coding. Do not interpret a phase request as authorization to implement the entire product. Preserve the diagnostic probe as a small console application without DI or production architecture.
+When a later user explicitly authorizes more implementation, work on the requested phase of `IMPLEMENTATION_PLAN.md`. That instruction supersedes the current scaffold-only authorization. Read both planning documents before coding. Do not interpret a phase request as authorization to implement the entire product. Preserve the diagnostic probe as a small console application without DI or production architecture.
 
 ## Implementation discipline
 

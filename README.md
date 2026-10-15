@@ -1,4 +1,46 @@
-# ONVIF event probe
+# ONVIF Webhook Bridge
+
+Project scaffold for a .NET 10 NativeAOT bridge, with a working standalone ONVIF diagnostic probe. The application currently exposes only `/health`; event matching, camera workers, forwarding, persistence and administration are future work.
+
+## Structure and build
+
+```text
+OnvifWebhookBridge.slnx
+Directory.Build.props / Directory.Build.targets / .editorconfig
+Dockerfile / .dockerignore
+src/
+  OnvifWebhookBridge/              Application and shared ONVIF adapter
+  OnvifProbe/                      Standalone diagnostic console
+tests/
+  OnvifWebhookBridge.Tests/        xUnit unit and Testcontainers integration tests
+  Build-OnvifSimulator.ps1         Pinned upstream simulator image build
+  OnvifProbe.Smoke.ps1             Synthetic console regression
+```
+
+```powershell
+dotnet build OnvifWebhookBridge.slnx
+dotnet test OnvifWebhookBridge.slnx --no-build --filter Category=Unit
+```
+
+Docker integration tests require a running Linux Docker engine. Build the simulator once with PowerShell 7, then run the tests (a missing Docker engine/image fails the integration test):
+
+```powershell
+./tests/Build-OnvifSimulator.ps1
+dotnet test OnvifWebhookBridge.slnx --no-build
+```
+
+The script builds [onvifsim's upstream Dockerfile](https://github.com/mrtian2016/onvifsim/blob/8f86706c2ba768006e85b38f6bc1c760d36f1bba/packaging/docker/Dockerfile) at the pinned commit. Testcontainers starts a disposable simulator, uses random host ports, loads a generic synthetic camera scenario with fake credentials and mapped advertised addresses, subscribes, renews, triggers true/false notifications through its control API, pulls both states and unsubscribes. No physical camera or destination is contacted. Containers are disposed automatically; the image remains cached. Add `--no-cache --pull` to the script's Docker build command when intentionally refreshing the upstream base/OS packages, then rerun the tests.
+
+Build the application image from the repository root:
+
+```powershell
+docker build -t onvif-webhook-bridge:scaffold .
+docker run --rm -p 8080:8080 onvif-webhook-bridge:scaffold
+```
+
+This is a health-only development shell on port 8080, with no administrator or event routes. The Dockerfile publishes NativeAOT for the builder's Linux architecture and runs as the image's non-root account. The base image manifests are digest-pinned; only linux/amd64 has been checked for this scaffold. Production deployment, Compose, persistence permissions, health probes and multi-platform verification remain later work. See [scaffold verification](docs/SCAFFOLD_VERIFICATION.md).
+
+## Diagnostic probe
 
 A small exploratory .NET 10 console tool using SharpOnvifClient 0.11.2. It discovers the event service from a configured device-service endpoint, subscribes without topic filtering, and prints every returned notification. It does not change camera configuration or forward events anywhere.
 
@@ -7,19 +49,19 @@ A small exploratory .NET 10 console tool using SharpOnvifClient 0.11.2. It disco
 Install the .NET 10 SDK. From the repository root:
 
 ```powershell
-dotnet build tools/OnvifProbe/OnvifProbe.csproj
+dotnet build src/OnvifProbe/OnvifProbe.csproj
 $env:ONVIF_ENDPOINT = 'http://<camera-host>/onvif/device_service'
 # Optional: set both credentials if the device requires authentication.
 $env:ONVIF_USERNAME = '<username>'
 $env:ONVIF_PASSWORD = '<password>'
-dotnet run --project tools/OnvifProbe -- --raw
+dotnet run --project src/OnvifProbe -- --raw
 ```
 
 Replace the placeholders locally. For an unauthenticated device, leave both credential variables unset. No endpoint or credential is hardcoded. Command-line options override environment variables:
 
 ```text
-dotnet run --project tools/OnvifProbe -- --endpoint <device-service-url> --raw
-dotnet run --project tools/OnvifProbe -- --help
+dotnet run --project src/OnvifProbe -- --endpoint <device-service-url> --raw
+dotnet run --project src/OnvifProbe -- --help
 ```
 
 `--username` and `--password` are also supported; prefer environment variables so credentials do not appear in process arguments or shell history. Bash uses `export ONVIF_ENDPOINT='http://<camera-host>/onvif/device_service'` and corresponding credential variables. A local `Properties/launchSettings.json` can supply arguments/environment for `dotnet run`; it is ignored by Git and must remain private. Use `--no-launch-profile` before `--` to bypass it. Press **Ctrl+C** to stop; cleanup attempts to unsubscribe for up to three seconds, then disposes the clients.
@@ -54,4 +96,4 @@ An initial reachability check failed. A later real-device run using private loca
 4. Leave it running across several lease periods and check renewal. With a coordinated network interruption, check reconnect/resubscribe. Do not modify camera settings to perform these tests.
 5. Press Ctrl+C and check that shutdown completes. Events observed in another client are not proof that this tool is interoperable; compare behaviour directly.
 
-No web server, database, dispatcher, Docker packaging, or integration service is included. The planning documents describe the eventual product separately.
+The probe remains a small standalone console application. It shares only the renewal-adapter source with the application, without depending on the web host. Existing ignored launch profiles in the old `tools` directory are not moved; recreate a private profile under `src/OnvifProbe/Properties/` if needed. The planning documents describe the eventual product separately.

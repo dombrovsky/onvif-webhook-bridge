@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Dockerfile" />
+    <File Path=".dockerignore" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/OnvifWebhookBridge/OnvifWebhookBridge.csproj" />
+    <Project Path="src/OnvifProbe/OnvifProbe.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OnvifWebhookBridge.Tests/OnvifWebhookBridge.Tests.csproj" />
+  </Folder>
+</Solution>
