@@ -15,5 +15,7 @@
     <Compile Include="../OnvifWebhookBridge.Tests/Web/ApiPath.cs" Link="ApiPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Web/AuthenticationPath.cs" Link="AuthenticationPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Web/ExecutablePath.cs" Link="ExecutablePath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/BrowserPath.cs" Link="BrowserPath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/BrowserFixture.cs" Link="BrowserFixture.cs" />
   </ItemGroup>
 </Project>

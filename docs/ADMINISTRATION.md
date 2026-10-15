@@ -1,6 +1,6 @@
 # Administrator setup and phase 6 API
 
-The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` after successful startup. All other application routes require a session except same-origin login.
+The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` after successful startup. All data and administration routes require a session except same-origin login. Phase 7 adds only a public empty login shell at `/` and its fixed `/app.js` and `/app.css` assets. See [browser usage](BROWSER_ADMINISTRATION.md).
 
 ## Initial setup
 
@@ -33,9 +33,9 @@ Use HTTPS for credentials/session transport beyond a controlled local developmen
 
 Login is bounded to five attempts per direct peer address and 20 globally per one-minute window, including successful attempts; at most 256 peer buckets and two concurrent password verifications exist. It returns 429 at capacity. Forwarded addresses cannot bypass the bound; peers behind a proxy share its quota. Invalid credentials receive a generic 401. There is no permanent account lockout. Request sizes and password lengths are checked before adaptive work.
 
-Every other API request sends the session cookie. `GET /api/session` returns the CSRF token and absolute expiry for that session. Every mutation and manual test also requires the same `Origin` and `X-CSRF-Token` header from that session. This applies to PUT, DELETE and POST, including logout and connectivity/HTTP tests. An invalid or missing session gives 401; invalid CSRF/origin gives 403. `POST /api/logout` invalidates the session and deletes its cookie. Liveness is the sole anonymous read.
+Every other API request sends the session cookie. `GET /api/session` returns the CSRF token and absolute expiry for that session. Every mutation and manual test also requires the same `Origin` and `X-CSRF-Token` header from that session. This applies to PUT, DELETE and POST, including logout and connectivity/HTTP tests. An invalid or missing session gives 401; invalid CSRF/origin gives 403. `POST /api/logout` invalidates the session and deletes its cookie. Liveness is the sole anonymous API read.
 
-All API responses use no-store caching, JSON's default HTML-sensitive escaping, nosniff and a restrictive CSP. No HTML/browser screens are delivered in phase 6. Future browser code must render names/XML as text. No internal configuration snapshots, hashes, camera credentials, action URLs/headers/bodies or arbitrary exception messages are serialized. Inspector event content is intentionally preserved within its existing bounds; treat authenticated event inspection as sensitive.
+All API responses use no-store caching, JSON's default HTML-sensitive escaping, nosniff and a restrictive CSP. Phase 7 serves embedded plain browser screens; names/XML are rendered as inert text. CSP permits same-origin scripts/styles/connections, forbids inline scripts and disallows base URLs, foreign form submissions and framing. No internal configuration snapshots, hashes, camera credentials, action URLs/headers/bodies or arbitrary exception messages are serialized. Inspector event content is intentionally preserved within its existing bounds; treat authenticated event inspection as sensitive.
 
 ## Routes and edits
 

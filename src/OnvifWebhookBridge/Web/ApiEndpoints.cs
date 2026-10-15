@@ -23,10 +23,16 @@ namespace OnvifWebhookBridge.Web
             {
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-                context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+                context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
                 try
                 {
                     var path = context.Request.Path;
+                    // Only the empty login shell and its code/styles are public. All data stays behind sessions.
+                    if (BrowserAssets.IsAsset(path) && HttpMethods.IsGet(context.Request.Method))
+                    {
+                        await BrowserAssets.Write(context);
+                        return;
+                    }
                     if (path == "/health" && HttpMethods.IsGet(context.Request.Method))
                     {
                         await next(context);

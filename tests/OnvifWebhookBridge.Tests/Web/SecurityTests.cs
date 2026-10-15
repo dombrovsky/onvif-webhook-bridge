@@ -14,6 +14,15 @@ namespace OnvifWebhookBridge.Tests.Web
             await SecurityPath.Verify(deadline.Token);
         }
         [Fact]
+        public async Task BrowserShellIsPortableAndHasNoAnonymousDataOrActiveMarkupSink()
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var data = new TemporaryStorage();
+            await using var app = await SecurityPath.Host(data.Path, deadline.Token);
+            using var client = SecurityPath.Client(app);
+            await BrowserPath.Verify(client, deadline.Token);
+        }
+        [Fact]
         public Task BoundedSessionAndResetAcceptance() => AuthenticationPath.Verify();
         [Fact]
         public async Task ProductionExecutableResetAndLogin()

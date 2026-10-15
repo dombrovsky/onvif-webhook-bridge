@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Persistence/Migrations/*.sql" />
+    <EmbeddedResource Include="wwwroot/*" />
   </ItemGroup>
 </Project>

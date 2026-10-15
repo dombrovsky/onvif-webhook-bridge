@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated 2026-10-15 for phase 6. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–4 deliver generic matching, HTTP forwarding and independent camera supervision with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset and outage/recovery checks remain pending. Phase 5 adds transactional SQLite configuration persistence and startup restoration; see [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [storage contract](docs/DATA_STORAGE.md). Phase 6 adds authenticated Minimal API administration, environment/password-file setup, offline reset and bounded session/CSRF/login protections; see [administration verification](docs/ADMIN_VERIFICATION.md) and [setup/API contract](docs/ADMINISTRATION.md). The production host refuses startup without an administrator. Phases 7–8 remain future work requiring separate authorization. Each phase remains independently reviewable.
+Planning baseline: 2026-10-14; updated 2026-10-15 for phase 7. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–4 deliver generic matching, HTTP forwarding and independent camera supervision with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset and outage/recovery checks remain pending. Phase 5 adds transactional SQLite configuration persistence and startup restoration; see [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [storage contract](docs/DATA_STORAGE.md). Phase 6 adds authenticated Minimal API administration, environment/password-file setup, offline reset and bounded session/CSRF/login protections; see [administration verification](docs/ADMIN_VERIFICATION.md) and [setup/API contract](docs/ADMINISTRATION.md). The production host refuses startup without an administrator. Phase 7 delivers plain browser administration using those APIs; see [browser verification](docs/BROWSER_VERIFICATION.md) and [usage](docs/BROWSER_ADMINISTRATION.md). Phase 8 remains future work requiring separate authorization. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -182,6 +182,8 @@ Phase 3 admission decision (2026-10-15): apply a 25-pending-job per-rule quota w
 **Tests/verification:** authentication/session/CSRF validation and log-redaction unit tests may use simulated request/response objects. Integration tests for API camera configuration, worker reconciliation, event delivery, and the full camera→event→rule→local HTTP path must run against onvifsim and its control API, including authenticated application APIs.
 
 ## Phase 7 — Minimal browser screens
+
+**Status: generic implementation complete; required automated gates passed. Evidence is recorded in [docs/BROWSER_VERIFICATION.md](docs/BROWSER_VERIFICATION.md).** Real-device activation/reset and outage/recovery gates remain pending; no phase 8 work is included.
 
 **Test maintenance gate:** add/update/remove focused browser/security tests and walkthrough cases as UI flows change; run the affected walkthroughs and automated regressions under the shared passing gate before completion.
 

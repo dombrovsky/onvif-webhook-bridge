@@ -85,6 +85,7 @@ namespace OnvifWebhookBridge.Tests.Web
                         catch (HttpRequestException) { }
                         await Task.Delay(50, token);
                     }
+                    await BrowserPath.Verify(client, token);
                     var session = await SecurityPath.Login(client);
                     using var denied = await SecurityPath.Send(client, "GET", "/api/configuration");
                     Check(denied.StatusCode == HttpStatusCode.Unauthorized, "ExecutableProtected");

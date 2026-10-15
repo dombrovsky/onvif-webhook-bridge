@@ -2,6 +2,12 @@ using OnvifWebhookBridge.Tests.Onvif;
 using OnvifWebhookBridge.Tests.Persistence;
 using OnvifWebhookBridge.Tests.Web;
 
+if (args is ["--browser-fixture"])
+{
+    await BrowserFixture.Run();
+    return 0;
+}
+
 if (args is ["--storage-only"])
 {
     try
