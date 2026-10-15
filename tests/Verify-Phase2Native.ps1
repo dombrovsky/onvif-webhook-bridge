@@ -1,2 +1,2 @@
-# Compatibility entry point; runs all preserved checks plus the current phase 4 lifecycle scenario.
-& "$PSScriptRoot/Verify-Phase4Native.ps1"
+# Compatibility entry point; runs all preserved checks through phase 5.
+& "$PSScriptRoot/Verify-Phase5Native.ps1"

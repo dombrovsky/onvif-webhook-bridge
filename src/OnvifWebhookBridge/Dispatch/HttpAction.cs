@@ -7,13 +7,18 @@ namespace OnvifWebhookBridge.Dispatch
     public sealed record ActionHeader(string Name, string Value);
 
     // Validated, detached configuration; never include this object in diagnostics.
-    public sealed class HttpAction
+    public sealed class HttpAction : IEquatable<HttpAction>
     {
         public Uri Address { get; }
         public string Method { get; }
         public IReadOnlyList<ActionHeader> Headers { get; }
         public string? JsonBody { get; }
         public int AdditionalAttempts { get; }
+
+        public bool Equals(HttpAction? other) => other is not null && Address == other.Address && Method == other.Method &&
+            JsonBody == other.JsonBody && AdditionalAttempts == other.AdditionalAttempts && Headers.SequenceEqual(other.Headers);
+        public override bool Equals(object? obj) => obj is HttpAction other && Equals(other);
+        public override int GetHashCode() => HashCode.Combine(Address, Method, JsonBody, AdditionalAttempts);
 
         public HttpAction(string url, string method = "GET", IEnumerable<ActionHeader>? headers = null,
             string? jsonBody = null, int additionalAttempts = 0)

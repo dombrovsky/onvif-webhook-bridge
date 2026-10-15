@@ -32,6 +32,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(8000), "/onvif/device_service").Uri,
                 new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(9000)).Uri,
                 deadline.Token);
+            await PersistencePath.Verify(
+                new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(8000), "/onvif/device_service").Uri,
+                new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(9000)).Uri,
+                deadline.Token);
         }
     }
 }

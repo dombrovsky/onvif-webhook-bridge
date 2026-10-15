@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility, generic phase 2 components and phase 3 single-camera in-memory HTTP pipeline complete. Phase 4 adds multiple-camera supervision and runtime reconciliation; persistence and administration remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md, docs/ONVIF_OBSERVATIONS.md, docs/PHASE2_VERIFICATION.md, docs/HTTP_VERIFICATION.md and docs/LIFECYCLE_VERIFICATION.md.
+Planning baseline: 2026-10-14. Updated status: phases 1–5 generic implementation complete through SQLite configuration persistence and startup restoration. Administration/authentication, UI and production deployment remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. Phase 2 adds generic event normalization, bounded history and in-memory rule admission. Phase 3 connects one camera to bounded HTTP delivery and an in-process manual test service. Phase 4 adds independent camera workers and in-memory reconciliation. The full bridge, UI, persistence and production Docker deployment remain future deliverables.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, solution/build scaffold, health-only application shell, Dockerfile and simulator-backed tests. Phases 2–4 add generic normalization/history/matching, bounded HTTP delivery, independent camera workers and reconciliation. Phase 5 persists configuration and recoverable secrets with transactional migrations, masked reads and startup restoration. The full administration/API/UI and production deployment remain future deliverables.
 
 ## Functional requirements
 

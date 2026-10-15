@@ -9,5 +9,7 @@
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/SimulatorPath.cs" Link="SimulatorPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/ForwardingPath.cs" Link="ForwardingPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/LifecyclePath.cs" Link="LifecyclePath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Persistence/StoragePath.cs" Link="StoragePath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Onvif/PersistencePath.cs" Link="PersistencePath.cs" />
   </ItemGroup>
 </Project>
