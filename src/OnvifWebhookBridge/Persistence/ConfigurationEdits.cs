@@ -6,7 +6,10 @@ namespace OnvifWebhookBridge.Persistence
     public sealed class StorageException(string category) : Exception("Configuration storage: " + category);
     public sealed class RevisionConflictException() : Exception("Configuration revision conflict.");
 
-    public enum SecretOperation { Preserve, Replace, Clear }
+    public enum SecretOperation
+    {
+        Preserve, Replace, Clear
+    }
     // Never echo edit objects or their values into diagnostics. Masked views contain presence flags only.
     public sealed class SecretEdit<T>(SecretOperation operation = SecretOperation.Preserve, T? value = default) where T : class
     {

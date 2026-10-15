@@ -1,7 +1,7 @@
 namespace OnvifWebhookBridge.Rules
 {
-    using System.Text;
     using OnvifWebhookBridge.Events;
+    using System.Text;
 
     // Owns history-before-matching and atomic state/admission. No worker or dispatcher.
     public sealed class RuleState(EventHistory history, TimeProvider? timeProvider = null, int identityCapacity = 1024)
@@ -19,7 +19,9 @@ namespace OnvifWebhookBridge.Rules
         {
             var replacement = configured.Take(MaximumRules + 1).ToArray();
             if (replacement.Length > MaximumRules || replacement.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count() != replacement.Length)
-            { throw new ArgumentException("Rule count or duplicate ID is invalid.", nameof(configured)); }
+            {
+                throw new ArgumentException("Rule count or duplicate ID is invalid.", nameof(configured));
+            }
             foreach (var rule in replacement)
             {
                 if (string.IsNullOrEmpty(rule.Id) || string.IsNullOrEmpty(rule.CameraId) || string.IsNullOrEmpty(rule.Topic) ||
@@ -29,13 +31,18 @@ namespace OnvifWebhookBridge.Rules
                     rule.Condition is { } f && (string.IsNullOrEmpty(f.Name) || f.Name.Length > 4096 ||
                         f.ExpectedValue.Length > 4096 || !Enum.IsDefined(f.Section) || !Enum.IsDefined(f.Comparison) ||
                         f.Comparison == ComparisonMode.Boolean && RuleMatcher.BooleanValue(f.ExpectedValue) is null))
-                { throw new ArgumentException("Invalid rule configuration.", nameof(configured)); }
+                {
+                    throw new ArgumentException("Invalid rule configuration.", nameof(configured));
+                }
             }
             lock (gate)
             {
                 foreach (var old in rules)
                 {
-                    if (!replacement.Contains(old)) { ClearRule(old.Id); }
+                    if (!replacement.Contains(old))
+                    {
+                        ClearRule(old.Id);
+                    }
                 }
                 rules = replacement;
             }
@@ -45,11 +52,20 @@ namespace OnvifWebhookBridge.Rules
         {
             lock (gate)
             {
-                foreach (var rule in rules.Where(r => r.CameraId == cameraId)) { ClearIdentities(rule.Id); }
+                foreach (var rule in rules.Where(r => r.CameraId == cameraId))
+                {
+                    ClearIdentities(rule.Id);
+                }
             }
         }
 
-        internal void ResetRule(string ruleId) { lock (gate) { ClearRule(ruleId); } }
+        internal void ResetRule(string ruleId)
+        {
+            lock (gate)
+            {
+                ClearRule(ruleId);
+            }
+        }
 
         // The callback must be bounded, synchronous and non-reentrant. True means accepted
         // into a future queue (or a test recorder). Throwing is a rejection, isolated per rule.
@@ -68,13 +84,22 @@ namespace OnvifWebhookBridge.Rules
 
                 DecisionKind Decide(ForwardingRule rule)
                 {
-                    if (!cameraEnabled || !rule.Enabled) { return DecisionKind.Disabled; }
+                    if (!cameraEnabled || !rule.Enabled)
+                    {
+                        return DecisionKind.Disabled;
+                    }
                     if (notification.Truncated)
                     {
-                        if (rule.CameraId == notification.CameraId) { ClearIdentities(rule.Id); }
+                        if (rule.CameraId == notification.CameraId)
+                        {
+                            ClearIdentities(rule.Id);
+                        }
                         return DecisionKind.UnsafeContent;
                     }
-                    if (rule.CameraId != notification.CameraId || rule.Topic != notification.Topic) { return DecisionKind.Unmatched; }
+                    if (rule.CameraId != notification.CameraId || rule.Topic != notification.Topic)
+                    {
+                        return DecisionKind.Unmatched;
+                    }
                     var matching = RuleMatcher.Matches(rule, notification);
                     if (rule.Mode == OccurrenceMode.Transition)
                     {
@@ -87,32 +112,65 @@ namespace OnvifWebhookBridge.Rules
                         }
                         var known = states.TryGetValue(identity, out var previous);
                         if (!known && states.Count == capacity)
-                        { states.Remove(order.First!.Value); order.RemoveFirst(); }
-                        if (!known) { order.AddLast(identity); }
+                        {
+                            states.Remove(order.First!.Value);
+                            order.RemoveFirst();
+                        }
+                        if (!known)
+                        {
+                            order.AddLast(identity);
+                        }
                         states[identity] = matching;
-                        if (!known || notification.PropertyOperation == "Initialized") { return DecisionKind.Baseline; }
-                        if (!matching) { return DecisionKind.Unmatched; }
-                        if (previous) { return DecisionKind.Unchanged; }
+                        if (!known || notification.PropertyOperation == "Initialized")
+                        {
+                            return DecisionKind.Baseline;
+                        }
+                        if (!matching)
+                        {
+                            return DecisionKind.Unmatched;
+                        }
+                        if (previous)
+                        {
+                            return DecisionKind.Unchanged;
+                        }
                     }
-                    else if (!matching) { return DecisionKind.Unmatched; }
+                    else if (!matching)
+                    {
+                        return DecisionKind.Unmatched;
+                    }
                     var now = clock.GetTimestamp();
                     if (acceptedAt.TryGetValue(rule.Id, out var last) && clock.GetElapsedTime(last, now) < rule.Cooldown)
-                    { return DecisionKind.Cooldown; }
+                    {
+                        return DecisionKind.Cooldown;
+                    }
                     bool accepted;
-                    try { accepted = admit(rule, notification); }
+                    try
+                    {
+                        accepted = admit(rule, notification);
+                    }
                     catch { accepted = false; }
-                    if (!accepted) { return DecisionKind.Rejected; }
+                    if (!accepted)
+                    {
+                        return DecisionKind.Rejected;
+                    }
                     acceptedAt[rule.Id] = clock.GetTimestamp();
                     return DecisionKind.Accepted;
                 }
             }
         }
 
-        private void ClearRule(string id) { ClearIdentities(id); acceptedAt.Remove(id); }
+        private void ClearRule(string id)
+        {
+            ClearIdentities(id);
+            acceptedAt.Remove(id);
+        }
         private void ClearIdentities(string id)
         {
             foreach (var identity in states.Keys.Where(k => k.Rule == id).ToArray())
-            { states.Remove(identity); order.Remove(identity); }
+            {
+                states.Remove(identity);
+                order.Remove(identity);
+            }
         }
 
         private static string Identity(NormalizedEvent notification, FieldCondition condition)
@@ -126,7 +184,9 @@ namespace OnvifWebhookBridge.Rules
                 foreach (var field in section.Where(f => !(selected && f.Kind == "SimpleItem" && f.Name == condition.Name))
                     .Select(f => Encode(f.Kind) + Encode(f.Name) + Encode(f.Value) + Encode(f.IdentityMetadata) +
                         (f.Kind == "SimpleItem" ? "" : Encode(f.Xml))).Order(StringComparer.Ordinal))
-                { text.Append(Encode(field)); }
+                {
+                    text.Append(Encode(field));
+                }
                 text.Append(';');
             }
             // Camera/topic already partitioned by the immutable rule.

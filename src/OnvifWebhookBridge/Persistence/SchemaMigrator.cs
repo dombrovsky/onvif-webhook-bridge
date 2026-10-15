@@ -10,7 +10,10 @@ namespace OnvifWebhookBridge.Persistence
             using var transaction = connection.BeginTransaction(deferred: false);
             using var version = Command(connection, transaction, "PRAGMA user_version");
             var current = Convert.ToInt32(version.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
-            if (current is < 0 or > CurrentVersion) { throw new StorageException("UnsupportedSchema"); }
+            if (current is < 0 or > CurrentVersion)
+            {
+                throw new StorageException("UnsupportedSchema");
+            }
             for (var next = current + 1; next <= CurrentVersion; next++)
             {
                 using var stream = typeof(SchemaMigrator).Assembly.GetManifestResourceStream(
@@ -30,7 +33,10 @@ namespace OnvifWebhookBridge.Persistence
             var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = sql;
-            for (var i = 0; i < values.Length; i++) { command.Parameters.AddWithValue("$p" + i, values[i] ?? DBNull.Value); }
+            for (var i = 0; i < values.Length; i++)
+            {
+                command.Parameters.AddWithValue("$p" + i, values[i] ?? DBNull.Value);
+            }
             return command;
         }
     }

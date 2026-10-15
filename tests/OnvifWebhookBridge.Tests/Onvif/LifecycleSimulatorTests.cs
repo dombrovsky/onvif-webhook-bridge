@@ -1,7 +1,7 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Net;
     using DotNet.Testcontainers.Builders;
+    using System.Net;
     using Xunit;
 
     public sealed class LifecycleSimulatorTests

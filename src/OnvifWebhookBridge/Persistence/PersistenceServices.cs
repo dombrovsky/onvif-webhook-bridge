@@ -14,7 +14,11 @@ namespace OnvifWebhookBridge.Persistence
 
         private sealed class ConfigurationStartup(ConfigurationStore store) : IHostedService
         {
-            public Task StartAsync(CancellationToken cancellationToken) { store.Initialize(); return Task.CompletedTask; }
+            public Task StartAsync(CancellationToken cancellationToken)
+            {
+                store.Initialize();
+                return Task.CompletedTask;
+            }
             public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         }
     }

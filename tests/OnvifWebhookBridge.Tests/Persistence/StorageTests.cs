@@ -1,10 +1,10 @@
 namespace OnvifWebhookBridge.Tests.Persistence
 {
-    using OnvifWebhookBridge.Persistence;
-    using OnvifWebhookBridge.Dispatch;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
+    using OnvifWebhookBridge.Dispatch;
+    using OnvifWebhookBridge.Persistence;
     using Xunit;
 
     public sealed class StorageTests
@@ -18,12 +18,17 @@ namespace OnvifWebhookBridge.Tests.Persistence
             using var temp = new TemporaryStorage();
             var first = new ConfigurationStore(temp.Path, StoragePath.Pipeline());
             var second = new ConfigurationStore(temp.Path, StoragePath.Pipeline());
-            first.Initialize(); second.Initialize();
+            first.Initialize();
+            second.Initialize();
             using var ready = new Barrier(2);
             async Task<bool> Edit(ConfigurationStore store) => await Task.Run(() =>
             {
                 ready.SignalAndWait();
-                try { store.Save(0, [StoragePath.Camera()], []); return true; }
+                try
+                {
+                    store.Save(0, [StoragePath.Camera()], []);
+                    return true;
+                }
                 catch (RevisionConflictException) { return false; }
             });
             var result = await Task.WhenAll(Edit(first), Edit(second));

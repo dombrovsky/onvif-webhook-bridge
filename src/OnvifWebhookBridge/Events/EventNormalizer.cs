@@ -1,9 +1,9 @@
 namespace OnvifWebhookBridge.Events
 {
+    using SharpOnvifCommon.Onvif;
     using System.Globalization;
     using System.Text;
     using System.Xml;
-    using SharpOnvifCommon.Onvif;
 
     public sealed class EventNormalizer
     {
@@ -24,13 +24,21 @@ namespace OnvifWebhookBridge.Events
             var attributes = new List<TopicAttribute>();
             foreach (var attribute in notification.Topic?.AnyAttr ?? [])
             {
-                if (attributes.Count == MaximumFields) { budget.Truncated = true; break; }
+                if (attributes.Count == MaximumFields)
+                {
+                    budget.Truncated = true;
+                    break;
+                }
                 attributes.Add(new(budget.Take(attribute.Name), budget.Take(attribute.NamespaceURI), budget.Take(attribute.Value)));
             }
             var topicXml = new List<string>();
             foreach (var node in notification.Topic?.Any ?? [])
             {
-                if (topicXml.Count == MaximumFields) { budget.Truncated = true; break; }
+                if (topicXml.Count == MaximumFields)
+                {
+                    budget.Truncated = true;
+                    break;
+                }
                 topicXml.Add(budget.Xml(node));
             }
             var message = notification.Message;
@@ -42,17 +50,26 @@ namespace OnvifWebhookBridge.Events
             var diagnostics = new List<string>();
             if (timeText is not null)
             {
-                try { cameraTime = XmlConvert.ToDateTimeOffset(timeText); }
+                try
+                {
+                    cameraTime = XmlConvert.ToDateTimeOffset(timeText);
+                }
                 catch (FormatException) { diagnostics.Add("InvalidCameraTimestamp"); }
             }
-            if (semantic is null) { diagnostics.Add("MissingSchemaMessage"); }
+            if (semantic is null)
+            {
+                diagnostics.Add("MissingSchemaMessage");
+            }
             var operation = semantic?.HasAttribute("PropertyOperation") == true
                 ? budget.Take(semantic.GetAttribute("PropertyOperation")) : null;
             var source = Fields("Source");
             var data = Fields("Data");
             var key = Fields("Key");
             var raw = message is null ? "" : budget.Xml(message);
-            if (budget.Truncated) { diagnostics.Add("ContentTruncated"); }
+            if (budget.Truncated)
+            {
+                diagnostics.Add("ContentTruncated");
+            }
             return new(id, name, receivedAt, topic, dialect, attributes.AsReadOnly(), topicXml.AsReadOnly(),
                 timeText, cameraTime, operation, source, data, key, raw, budget.Truncated,
                 diagnostics.AsReadOnly(), budget.Used);
@@ -67,7 +84,11 @@ namespace OnvifWebhookBridge.Events
                     {
                         foreach (var item in container.ChildNodes.OfType<XmlElement>())
                         {
-                            if (++budget.FieldCount > MaximumFields) { budget.Truncated = true; break; }
+                            if (++budget.FieldCount > MaximumFields)
+                            {
+                                budget.Truncated = true;
+                                break;
+                            }
                             fields.Add(new(budget.Take(item.NamespaceURI == Schema ? item.LocalName : $"{{{item.NamespaceURI}}}{item.LocalName}"),
                                 item.HasAttribute("Name") ? budget.Take(item.GetAttribute("Name")) : null,
                                 item.HasAttribute("Value") ? budget.Take(item.GetAttribute("Value")) : null,
@@ -81,9 +102,18 @@ namespace OnvifWebhookBridge.Events
 
         private sealed class Budget
         {
-            public int Used { get; private set; }
-            public int FieldCount { get; set; }
-            public bool Truncated { get; set; }
+            public int Used
+            {
+                get; private set;
+            }
+            public int FieldCount
+            {
+                get; set;
+            }
+            public bool Truncated
+            {
+                get; set;
+            }
             public string? Optional(string? value) => value is null ? null : Take(value);
             public string Metadata(XmlElement element)
             {
@@ -100,21 +130,34 @@ namespace OnvifWebhookBridge.Events
                         WritePart(attribute.Value);
                     }
                     using var writer = XmlWriter.Create(output, new XmlWriterSettings
-                    { OmitXmlDeclaration = true, ConformanceLevel = ConformanceLevel.Fragment });
-                    foreach (XmlNode child in element.ChildNodes) { child.WriteTo(writer); }
+                    {
+                        OmitXmlDeclaration = true,
+                        ConformanceLevel = ConformanceLevel.Fragment
+                    });
+                    foreach (XmlNode child in element.ChildNodes)
+                    {
+                        child.WriteTo(writer);
+                    }
                 }
                 catch (LimitReachedException) { Truncated = true; }
                 var result = output.ToString();
                 Used += Encoding.UTF8.GetByteCount(result);
                 return result;
-                void WritePart(string value) { output.Write($"{value.Length}:"); output.Write(value); }
+                void WritePart(string value)
+                {
+                    output.Write($"{value.Length}:");
+                    output.Write(value);
+                }
             }
             public string Topic(XmlNode[] nodes)
             {
                 using var output = new CappedWriter(Math.Min(MaximumStringBytes, MaximumEventBytes - Used));
                 try
                 {
-                    foreach (var node in nodes) { output.Write(node.InnerText); }
+                    foreach (var node in nodes)
+                    {
+                        output.Write(node.InnerText);
+                    }
                 }
                 catch (LimitReachedException) { Truncated = true; }
                 var result = output.ToString();
@@ -128,7 +171,11 @@ namespace OnvifWebhookBridge.Events
                 var length = 0;
                 foreach (var rune in value.EnumerateRunes())
                 {
-                    if (count + rune.Utf8SequenceLength > limit) { Truncated = true; break; }
+                    if (count + rune.Utf8SequenceLength > limit)
+                    {
+                        Truncated = true;
+                        break;
+                    }
                     count += rune.Utf8SequenceLength;
                     length += rune.Utf16SequenceLength;
                 }
@@ -145,7 +192,10 @@ namespace OnvifWebhookBridge.Events
                 try
                 {
                     using var writer = XmlWriter.Create(output, new XmlWriterSettings
-                    { OmitXmlDeclaration = true, ConformanceLevel = ConformanceLevel.Fragment });
+                    {
+                        OmitXmlDeclaration = true,
+                        ConformanceLevel = ConformanceLevel.Fragment
+                    });
                     node.WriteTo(writer);
                 }
                 catch (LimitReachedException) { Truncated = true; }
@@ -165,10 +215,16 @@ namespace OnvifWebhookBridge.Events
             public override void Write(char value) => Write(value.ToString(CultureInfo.InvariantCulture));
             public override void Write(string? value)
             {
-                if (value is null) { return; }
+                if (value is null)
+                {
+                    return;
+                }
                 foreach (var rune in value.EnumerateRunes())
                 {
-                    if (bytes + rune.Utf8SequenceLength > limit) { throw new LimitReachedException(); }
+                    if (bytes + rune.Utf8SequenceLength > limit)
+                    {
+                        throw new LimitReachedException();
+                    }
                     text.Append(rune.ToString());
                     bytes += rune.Utf8SequenceLength;
                 }

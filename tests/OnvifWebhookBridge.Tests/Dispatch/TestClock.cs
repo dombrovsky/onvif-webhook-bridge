@@ -12,7 +12,10 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         {
             lock (timers)
             {
-                var timer = new Timer(this, callback, state); timer.Change(dueTime, period); timers.Add(timer); return timer;
+                var timer = new Timer(this, callback, state);
+                timer.Change(dueTime, period);
+                timers.Add(timer);
+                return timer;
             }
         }
         public void Advance(TimeSpan elapsed)
@@ -22,9 +25,15 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             {
                 ticks += elapsed.Ticks;
                 due = timers.Where(t => t.Due <= ticks).ToArray();
-                foreach (var timer in due) { timer.Due = long.MaxValue; }
+                foreach (var timer in due)
+                {
+                    timer.Due = long.MaxValue;
+                }
             }
-            foreach (var timer in due) { timer.Callback(timer.State); }
+            foreach (var timer in due)
+            {
+                timer.Callback(timer.State);
+            }
         }
         private sealed class Timer(TestClock owner, TimerCallback callback, object? state) : ITimer
         {
@@ -34,10 +43,24 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             public bool Change(TimeSpan dueTime, TimeSpan period)
             {
                 lock (owner.timers)
-                { Due = dueTime == Timeout.InfiniteTimeSpan ? long.MaxValue : owner.ticks + dueTime.Ticks; return true; }
+                {
+                    Due = dueTime == Timeout.InfiniteTimeSpan ? long.MaxValue : owner.ticks + dueTime.Ticks;
+                    return true;
+                }
             }
-            public void Dispose() { lock (owner.timers) { owner.timers.Remove(this); Due = long.MaxValue; } }
-            public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+            public void Dispose()
+            {
+                lock (owner.timers)
+                {
+                    owner.timers.Remove(this);
+                    Due = long.MaxValue;
+                }
+            }
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
         }
     }
 }

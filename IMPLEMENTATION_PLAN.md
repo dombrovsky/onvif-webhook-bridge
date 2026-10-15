@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated 2026-10-15 for phase 5. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–4 deliver generic matching, HTTP forwarding and independent camera supervision with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset and outage/recovery checks remain pending. Phase 5 adds transactional SQLite configuration persistence and startup restoration; see [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [storage contract](docs/DATA_STORAGE.md). The host exposes only health, restoring saved configuration or starting empty on a new database. Phases 6–8 remain future work requiring separate authorization. Each phase remains independently reviewable.
+Planning baseline: 2026-10-14; updated 2026-10-15 for phase 6. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–4 deliver generic matching, HTTP forwarding and independent camera supervision with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset and outage/recovery checks remain pending. Phase 5 adds transactional SQLite configuration persistence and startup restoration; see [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [storage contract](docs/DATA_STORAGE.md). Phase 6 adds authenticated Minimal API administration, environment/password-file setup, offline reset and bounded session/CSRF/login protections; see [administration verification](docs/ADMIN_VERIFICATION.md) and [setup/API contract](docs/ADMINISTRATION.md). The production host refuses startup without an administrator. Phases 7–8 remain future work requiring separate authorization. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -166,6 +166,8 @@ Phase 3 admission decision (2026-10-15): apply a 25-pending-job per-rule quota w
 **Tests/verification:** temporary DB round-trip, migrations from an earlier schema, rollback, foreign keys, simultaneous edits/revision conflict, explicit secret preserve/replace/clear, invalid configuration, backup/restore and AOT native SQLite loading may be unit/storage tests with simulated data. Integration tests for restart reconciliation with active cameras/rules must use onvifsim. Verify actual Linux file modes; Windows ACL behaviour is not evidence for container modes.
 
 ## Phase 6 — Authenticated Minimal API administration
+
+**Status: generic implementation complete; hardware/platform gates pending.** Authenticated CRUD/status/event/test APIs, environment/password-file setup, explicit offline reset, bounded sessions/throttling and CSRF/origin protections reuse the phase 5 store and existing services. [The phase 6 handoff](docs/ADMIN_VERIFICATION.md) records JIT/onvifsim/Linux x64 NativeAOT and production-executable gates. No phase 7 UI or phase 8 deployment is included.
 
 **Test maintenance gate:** add/update/remove API, authentication, authorization, CSRF and redaction tests with each endpoint or security-contract change; satisfy the shared passing gate, including affected native API checks, before completion.
 

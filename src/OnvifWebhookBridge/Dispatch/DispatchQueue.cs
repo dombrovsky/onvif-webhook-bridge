@@ -13,17 +13,36 @@ namespace OnvifWebhookBridge.Dispatch
         public const int Capacity = 100;
         public const int PerRuleCapacity = 25;
         private long rejected;
-        public long Rejected { get { lock (gate) { return rejected; } } }
+        public long Rejected
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return rejected;
+                }
+            }
+        }
 
         public bool TryEnqueue(DispatchJob job)
         {
             lock (gate)
             {
                 if (stopped || count == Capacity || queues.TryGetValue(job.RuleId, out var existing) && existing.Count == PerRuleCapacity)
-                { rejected++; return false; }
+                {
+                    rejected++;
+                    return false;
+                }
                 if (!queues.TryGetValue(job.RuleId, out var queue))
-                { queue = new(); queues.Add(job.RuleId, queue); rotation.AddLast(job.RuleId); }
-                queue.Enqueue(job); count++; Signal(); return true;
+                {
+                    queue = new();
+                    queues.Add(job.RuleId, queue);
+                    rotation.AddLast(job.RuleId);
+                }
+                queue.Enqueue(job);
+                count++;
+                Signal();
+                return true;
             }
         }
 
@@ -42,11 +61,20 @@ namespace OnvifWebhookBridge.Dispatch
                         {
                             var id = node.Value;
                             var queue = queues[id];
-                            var job = queue.Dequeue(); count--; active.Add(id);
+                            var job = queue.Dequeue();
+                            count--;
+                            active.Add(id);
                             rotation.Remove(node);
-                            if (queue.Count == 0) { queues.Remove(id); }
-                            else { rotation.AddLast(id); }
-                            Signal(); return job;
+                            if (queue.Count == 0)
+                            {
+                                queues.Remove(id);
+                            }
+                            else
+                            {
+                                rotation.AddLast(id);
+                            }
+                            Signal();
+                            return job;
                         }
                         node = next;
                     }
@@ -55,16 +83,33 @@ namespace OnvifWebhookBridge.Dispatch
             }
         }
 
-        public void Complete(DispatchJob job) { lock (gate) { active.Remove(job.RuleId); Signal(); } }
+        public void Complete(DispatchJob job)
+        {
+            lock (gate)
+            {
+                active.Remove(job.RuleId);
+                Signal();
+            }
+        }
         public IReadOnlyList<DispatchJob> Stop()
         {
             lock (gate)
             {
                 stopped = true;
                 var abandoned = queues.Values.SelectMany(q => q).ToArray();
-                queues.Clear(); rotation.Clear(); count = 0; Signal(); return abandoned;
+                queues.Clear();
+                rotation.Clear();
+                count = 0;
+                Signal();
+                return abandoned;
             }
         }
-        private void Signal() { if (changed.CurrentCount == 0) { changed.Release(); } }
+        private void Signal()
+        {
+            if (changed.CurrentCount == 0)
+            {
+                changed.Release();
+            }
+        }
     }
 }

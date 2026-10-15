@@ -1,7 +1,7 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Net;
     using DotNet.Testcontainers.Builders;
+    using System.Net;
     using Xunit;
 
     public sealed class SimulatorTests
@@ -33,6 +33,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(9000)).Uri,
                 deadline.Token);
             await PersistencePath.Verify(
+                new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(8000), "/onvif/device_service").Uri,
+                new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(9000)).Uri,
+                deadline.Token);
+            await Web.ApiPath.Verify(
                 new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(8000), "/onvif/device_service").Uri,
                 new UriBuilder("http", simulator.Hostname, simulator.GetMappedPublicPort(9000)).Uri,
                 deadline.Token);

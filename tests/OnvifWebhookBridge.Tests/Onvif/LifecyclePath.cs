@@ -1,11 +1,5 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Collections.Concurrent;
-    using System.Diagnostics;
-    using System.Net;
-    using System.Net.Http.Json;
-    using System.Text;
-    using System.Text.Json;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Hosting.Server;
@@ -22,6 +16,12 @@ namespace OnvifWebhookBridge.Tests.Onvif
     using SharpOnvifClient.Events;
     using SharpOnvifCommon.Security;
     using SharpOnvifCommon.Soap;
+    using System.Collections.Concurrent;
+    using System.Diagnostics;
+    using System.Net;
+    using System.Net.Http.Json;
+    using System.Text;
+    using System.Text.Json;
 
     // Real onvifsim control API/faults; shared unchanged with the Linux native executable.
     internal static class LifecyclePath
@@ -48,7 +48,9 @@ namespace OnvifWebhookBridge.Tests.Onvif
             recorder.Map("/{**path}", (HttpContext c) => { captures.Enqueue(c.Request.Path.Value!); c.Response.StatusCode = 204; });
             await recorder.StartAsync(token);
             var origin = recorder.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
-            var services = new ServiceCollection(); services.AddLogging(b => b.ClearProviders()); services.AddCameraPipeline();
+            var services = new ServiceCollection();
+            services.AddLogging(b => b.ClearProviders());
+            services.AddCameraPipeline();
             await using var provider = services.BuildServiceProvider();
             var pipeline = provider.GetRequiredService<CameraPipeline>();
             var history = provider.GetRequiredService<EventHistory>();
@@ -74,9 +76,12 @@ namespace OnvifWebhookBridge.Tests.Onvif
             }
             try
             {
-                await dispatcher.StartAsync(token); await supervisor.StartAsync(token);
-                await Ready("a"); await Ready("b");
-                await Trigger("a", false); await Seen("a", false);
+                await dispatcher.StartAsync(token);
+                await supervisor.StartAsync(token);
+                await Ready("a");
+                await Ready("b");
+                await Trigger("a", false);
+                await Seen("a", false);
                 await Trigger("a", true);
                 await Until(() => captures.Count(c => c == "/transition") == 1, token, "InitialTransition");
                 await HealthyB();
@@ -104,9 +109,11 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 var epoch = Status("a").Epoch;
                 await Invalidate("a");
                 await Until(() => Status("a").Epoch > epoch && Status("a").State == "Subscribed", token, "InvalidSubscriptionRecovery");
-                await Trigger("a", true); await Seen("a", true);
+                await Trigger("a", true);
+                await Seen("a", true);
                 Check(captures.Count(c => c == "/transition") == 1, "ReconnectBaseline");
-                await Trigger("a", false); await Seen("a", false);
+                await Trigger("a", false);
+                await Seen("a", false);
                 await Trigger("a", true);
                 await Until(() => captures.Count(c => c == "/transition") == 2, token, "TransitionAfterReconnect");
                 await HealthyB();
@@ -142,35 +149,65 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 await Ready("a");
 
                 // Wrong synthetic credentials are a configuration edit; restore them after observing failure.
-                a = a with { Password = "synthetic-wrong-secret" }; Configure();
+                a = a with
+                {
+                    Password = "synthetic-wrong-secret"
+                };
+                Configure();
                 await Until(() => Status("a").State == "Error", token, "AuthenticationFault");
                 await HealthyB();
-                a = a with { Password = password }; Configure(); await Ready("a");
+                a = a with
+                {
+                    Password = password
+                };
+                Configure();
+                await Ready("a");
 
                 epoch = Status("a").Epoch;
                 using (var response = await control.PostAsync("api/cameras/a/offline?seconds=3", null, token))
-                { Check(response.IsSuccessStatusCode, "OfflineControl"); }
+                {
+                    Check(response.IsSuccessStatusCode, "OfflineControl");
+                }
                 await HealthyB();
                 await Until(() => Status("a").Epoch > epoch && Status("a").State == "Subscribed", token, "NetworkRestartRecovery");
                 Check((await Sessions("a")).Length == 1, "RecoveredRemoteSubscriptionCleanup");
-                await Trigger("a", true); await Seen("a", true);
+                await Trigger("a", true);
+                await Seen("a", true);
 
                 // Name/connection edits, disable/enable and deletion reconcile against actual sessions.
                 var obsoleteAddress = (await Sessions("a")).Single();
-                a = a with { Name = "Edited synthetic camera", Endpoint = new Uri(first, "/onvif/events_service").AbsoluteUri }; Configure();
+                a = a with
+                {
+                    Name = "Edited synthetic camera",
+                    Endpoint = new Uri(first, "/onvif/events_service").AbsoluteUri
+                };
+                Configure();
                 await Until(async () => Status("a").State == "Subscribed" && (await Sessions("a")) is [var replacement] && replacement != obsoleteAddress, token, "ConnectionEdit");
                 await Trigger("a", true);
                 await Until(() => history.Snapshot().Any(e => e.CameraName == "Edited synthetic camera"), token, "EditedWorkerObservation");
-                a = a with { Enabled = false }; Configure();
+                a = a with
+                {
+                    Enabled = false
+                };
+                Configure();
                 await Until(async () => Status("a").State == "Disabled" && (await Sessions("a")).Length == 0, token, "DisableCleanup");
                 await HealthyB();
-                a = a with { Enabled = true }; Configure(); await Ready("a");
+                a = a with
+                {
+                    Enabled = true
+                };
+                Configure();
+                await Ready("a");
                 await Until(async () => (await Sessions("a")).Length == 1, token, "EnabledSingleSession");
 
                 // Cleanup is bounded even when the simulator delays unsubscribe beyond its deadline.
                 await Patch("a", "{\"quirks\":{\"transport.global_delay\":{\"enabled\":true,\"params\":{\"ms\":5000}}}}");
                 var began = Stopwatch.GetTimestamp();
-                a = a with { Enabled = false }; Configure();
+                a = a with
+                {
+                    Enabled = false
+                };
+                Configure();
                 await Until(() => Status("a").State == "Disabled", token, "BoundedCleanup");
                 Check(Stopwatch.GetElapsedTime(began) < TimeSpan.FromSeconds(5), "CleanupDeadline");
                 await Patch("a", "{\"quirks\":{\"transport.global_delay\":false}}");
@@ -189,8 +226,12 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 await recorder.StopAsync(shutdown.Token);
             }
             Check((await Sessions("a")).Length == 0 && (await Sessions("b")).Length == 0, "FinalSubscriptionCleanup");
-            await Until(async () => { using var da = await SessionDocument("a"); using var db = await SessionDocument("b");
-                return da.RootElement.GetProperty("httpClients").GetInt32() == 0 && db.RootElement.GetProperty("httpClients").GetInt32() == 0; }, token, "FinalClientCleanup");
+            await Until(async () =>
+            {
+                using var da = await SessionDocument("a");
+                using var db = await SessionDocument("b");
+                return da.RootElement.GetProperty("httpClients").GetInt32() == 0 && db.RootElement.GetProperty("httpClients").GetInt32() == 0;
+            }, token, "FinalClientCleanup");
 
             async Task Trigger(string id, bool value)
             {
@@ -230,7 +271,11 @@ namespace OnvifWebhookBridge.Tests.Onvif
             {
                 var auth = new OnvifAuthenticationSettings(DigestAuthentication.HttpDigest | DigestAuthentication.WsUsernameToken);
                 using var manager = new SubscriptionManagerClient(address, new OnvifClientSettings
-                { Credentials = new NetworkCredential(username, password), Authentication = new AddressedAuthentication(auth, address), Timeout = TimeSpan.FromSeconds(5) });
+                {
+                    Credentials = new NetworkCredential(username, password),
+                    Authentication = new AddressedAuthentication(auth, address),
+                    Timeout = TimeSpan.FromSeconds(5)
+                });
                 await manager.RenewAsync(new RenewRequest { TerminationTime = duration }, token);
             }
             async Task Invalidate(string id)
@@ -246,10 +291,21 @@ namespace OnvifWebhookBridge.Tests.Onvif
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(45));
-            try { while (!await condition()) { await Task.Delay(25, deadline.Token); } }
+            try
+            {
+                while (!await condition())
+                {
+                    await Task.Delay(25, deadline.Token);
+                }
+            }
             catch (OperationCanceledException) { throw new InvalidOperationException(category); }
         }
         private static void Check(bool condition, string category)
-        { if (!condition) { throw new InvalidOperationException(category); } }
+        {
+            if (!condition)
+            {
+                throw new InvalidOperationException(category);
+            }
+        }
     }
 }

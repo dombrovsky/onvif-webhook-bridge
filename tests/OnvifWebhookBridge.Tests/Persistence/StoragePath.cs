@@ -92,21 +92,29 @@ namespace OnvifWebhookBridge.Tests.Persistence
                 store.Read().Rules.Single() is { HasHeaders: false, HasJsonBody: false }, "ExplicitClear");
             Check(!pipeline.Eligible(job), "CommittedEditInvalidatesQueuedJob");
             using (var connection = temp.Open())
-            { Check(Scalar(connection, "SELECT Url FROM Rules") == "https://destination.example/replaced", "ExplicitReplace"); }
+            {
+                Check(Scalar(connection, "SELECT Url FROM Rules") == "https://destination.example/replaced", "ExplicitReplace");
+            }
 
             // SQLite online backup creates a consistent standalone snapshot, including WAL content.
             using var backup = new TemporaryStorage();
             Directory.CreateDirectory(backup.Path);
             using (var source = temp.Open())
             using (var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backup.Database, Pooling = false }.ToString()))
-            { target.Open(); source.BackupDatabase(target); }
+            {
+                target.Open();
+                source.BackupDatabase(target);
+            }
             var restored = new ConfigurationStore(backup.Path, Pipeline());
             restored.Initialize();
             Check(restored.Read().Revision == 3 && restored.Read().HasAdministrator, "BackupRestore");
             VerifyMigration();
             VerifyMigrationRollback();
             VerifyCorruption();
-            if (OperatingSystem.IsLinux()) { VerifyLinux(temp, store); }
+            if (OperatingSystem.IsLinux())
+            {
+                VerifyLinux(temp, store);
+            }
             using var versionConnection = temp.Open();
             Check(versionConnection.ServerVersion.Length > 0, "NativeLoading");
             Console.WriteLine("PASS: SQLite " + versionConnection.ServerVersion + "; storage transactions, migrations, masking, backup/restore and platform permissions.");
@@ -166,14 +174,19 @@ namespace OnvifWebhookBridge.Tests.Persistence
 
         private static void VerifyLinux(TemporaryStorage temp, ConfigurationStore store)
         {
-            if (!OperatingSystem.IsLinux()) { return; }
+            if (!OperatingSystem.IsLinux())
+            {
+                return;
+            }
             Check(File.GetUnixFileMode(temp.Path) == (UnixFileMode)448, "Directory0700");
             // Keep a WAL connection alive and force SHM creation, then inspect actual sidecars.
             using (var connection = temp.Open())
             {
                 Execute(connection, "UPDATE Configuration SET Revision=Revision");
                 foreach (var path in new[] { temp.Database, temp.Database + "-wal", temp.Database + "-shm" })
-                { Check(File.Exists(path) && File.GetUnixFileMode(path) == (UnixFileMode)384, "Files0600"); }
+                {
+                    Check(File.Exists(path) && File.GetUnixFileMode(path) == (UnixFileMode)384, "Files0600");
+                }
             }
             File.SetUnixFileMode(temp.Database, UnixFileMode.UserRead);
             Throws<StorageException>(() => store.Save(3, [], []));
@@ -202,12 +215,33 @@ namespace OnvifWebhookBridge.Tests.Persistence
         }
 
         internal static void Execute(SqliteConnection connection, string sql)
-        { using var command = connection.CreateCommand(); command.CommandText = sql; command.ExecuteNonQuery(); }
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.ExecuteNonQuery();
+        }
         internal static string Scalar(SqliteConnection connection, string sql)
-        { using var command = connection.CreateCommand(); command.CommandText = sql; return Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture)!; }
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            return Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture)!;
+        }
         internal static T Throws<T>(Action action) where T : Exception
-        { try { action(); } catch (T error) { return error; } throw new InvalidOperationException("ExpectedFailure:" + typeof(T).Name); }
-        internal static void Check(bool value, string category) { if (!value) { throw new InvalidOperationException(category); } }
+        {
+            try
+            {
+                action();
+            }
+            catch (T error) { return error; }
+            throw new InvalidOperationException("ExpectedFailure:" + typeof(T).Name);
+        }
+        internal static void Check(bool value, string category)
+        {
+            if (!value)
+            {
+                throw new InvalidOperationException(category);
+            }
+        }
     }
 
     internal sealed class TemporaryStorage : IDisposable
@@ -217,10 +251,21 @@ namespace OnvifWebhookBridge.Tests.Persistence
         internal SqliteConnection Open()
         {
             var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = Database, Mode = SqliteOpenMode.ReadWrite, Pooling = false, ForeignKeys = true }.ToString());
+            {
+                DataSource = Database,
+                Mode = SqliteOpenMode.ReadWrite,
+                Pooling = false,
+                ForeignKeys = true
+            }.ToString());
             connection.Open();
             return connection;
         }
-        public void Dispose() { if (Directory.Exists(Path)) { Directory.Delete(Path, true); } }
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, true);
+            }
+        }
     }
 }

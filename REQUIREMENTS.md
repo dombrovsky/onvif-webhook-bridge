@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Updated status: phases 1–5 generic implementation complete through SQLite configuration persistence and startup restoration. Administration/authentication, UI and production deployment remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md.
+Planning baseline: 2026-10-14. Updated status: phases 1–6 generic implementation complete through SQLite persistence and authenticated Minimal API administration. Browser UI and production deployment remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md and docs/ADMIN_VERIFICATION.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, solution/build scaffold, health-only application shell, Dockerfile and simulator-backed tests. Phases 2–4 add generic normalization/history/matching, bounded HTTP delivery, independent camera workers and reconciliation. Phase 5 persists configuration and recoverable secrets with transactional migrations, masked reads and startup restoration. The full administration/API/UI and production deployment remain future deliverables.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, solution/build scaffold, health-only application shell, Dockerfile and simulator-backed tests. Phases 2–4 add generic normalization/history/matching, bounded HTTP delivery, independent camera workers and reconciliation. Phase 5 persists configuration and recoverable secrets with transactional migrations, masked reads and startup restoration. Phase 6 adds administrator bootstrap/offline reset, bounded sessions, CSRF/origin/login limits and authenticated configuration/status/event/test APIs. Browser UI and production deployment remain future deliverables.
 
 ## Functional requirements
 
@@ -90,7 +90,7 @@ No video streaming/recording, FFmpeg, RTSP proxy, MQTT, firmware changes, mobile
 | Does released SharpOnvifClient preserve every extension and endpoint reference parameter under AOT? | Exposed message XML preserves structured/unknown content; full envelope is unavailable and convenience methods omit reference parameters. User verified NativeAOT/trimming; new processing paths and Linux targets need their own checks. | Phases 2, 4 and 8 |
 | Transition initialization and identity semantics? | Proposed rules above avoid reconnect-triggered actions; revise from observed Source/Key fields before implementing matcher. | Phases 1–2 |
 | Should retries be enabled by default? | Opt-in because destination actions may not be idempotent. Confirm destination behaviour independently. | Phase 3 |
-| Administrator setup / transport? | Environment bootstrap, opaque session, reverse-proxy HTTPS proposed; no public first-run wizard. | Phase 6 |
+| Administrator setup / transport? | Environment/password-file bootstrap, explicit offline reset and bounded opaque sessions implemented; no public first-run wizard. Production HTTPS/proxy setup remains phase 8. | Phase 6 |
 | Secret encryption at rest required? | Restrictive files/volume and masked reads satisfy baseline; encryption would require a key-management decision. | Phase 5 |
 | Which deployment architecture and container runtime? | amd64/arm64 baseline; arm/v7 conditional; Linux x86 unavailable. | Phase 8 |
 | Destination TLS trust and action/result behaviour? | Operator-configured destination; no live delivery verification performed. Successful HTTP status alone does not prove the destination acted. | Phase 3 live verification |

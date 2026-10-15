@@ -1,9 +1,5 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Collections.Concurrent;
-    using System.Net;
-    using System.Net.Http.Json;
-    using System.Text;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Hosting.Server;
@@ -16,6 +12,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
     using OnvifWebhookBridge.Events;
     using OnvifWebhookBridge.Onvif;
     using OnvifWebhookBridge.Rules;
+    using System.Collections.Concurrent;
+    using System.Net;
+    using System.Net.Http.Json;
+    using System.Text;
 
     // Runs unchanged under xUnit and Linux NativeAOT. The ONVIF source is always onvifsim.
     internal static class ForwardingPath
@@ -35,7 +35,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 var body = await reader.ReadToEndAsync(token);
                 captures.Enqueue((context.Request.Path.Value!, context.Request.Method, context.Request.Headers["X-Synthetic"].ToString(), body));
                 context.Response.StatusCode = context.Request.Path == "/failure" ? 500 : context.Request.Path == "/redirect" ? 302 : 204;
-                if (context.Request.Path == "/redirect") { context.Response.Headers.Location = "/redirect-target"; }
+                if (context.Request.Path == "/redirect")
+                {
+                    context.Response.Headers.Location = "/redirect-target";
+                }
             });
             await recorder.StartAsync(token);
             var origin = recorder.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
@@ -69,7 +72,12 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 await Until(() => worker.Status.Single().State == "Subscribed", token);
                 // Hold execution to deterministically exercise real-event overflow without blocking polling.
                 for (var rule = 0; rule < 4; rule++)
-                { for (var i = 0; i < 25; i++) { Check(pipeline.ManualTest("fill" + rule), "FillQueue"); } }
+                {
+                    for (var i = 0; i < 25; i++)
+                    {
+                        Check(pipeline.ManualTest("fill" + rule), "FillQueue");
+                    }
+                }
                 await Trigger(true);
                 await Until(() => history.Snapshot().Any(e => e.Topic == topic), token);
                 Check(queue.Rejected == 3, "EventOverflow");
@@ -114,19 +122,36 @@ namespace OnvifWebhookBridge.Tests.Onvif
         }
 
         private static async Task Until(Func<bool> condition, CancellationToken token)
-        { while (!condition()) { await Task.Delay(20, token); } }
+        {
+            while (!condition())
+            {
+                await Task.Delay(20, token);
+            }
+        }
         private static void Check(bool condition, string category)
-        { if (!condition) { throw new InvalidOperationException(category); } }
+        {
+            if (!condition)
+            {
+                throw new InvalidOperationException(category);
+            }
+        }
 
         private sealed class SafeLogCapture : ILoggerProvider, ILogger
         {
             public StringBuilder Text { get; } = new();
             public ILogger CreateLogger(string categoryName) => this;
-            public void Dispose() { }
+            public void Dispose()
+            {
+            }
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel logLevel) => true;
             public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> formatter)
-            { lock (Text) { Text.AppendLine(formatter(state, error)); } }
+            {
+                lock (Text)
+                {
+                    Text.AppendLine(formatter(state, error));
+                }
+            }
         }
     }
 }

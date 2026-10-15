@@ -1,10 +1,10 @@
 namespace OnvifWebhookBridge.Tests.Events
 {
-    using System.Text;
-    using System.Xml;
     using OnvifWebhookBridge.Events;
     using OnvifWebhookBridge.Rules;
     using SharpOnvifCommon.Onvif;
+    using System.Text;
+    using System.Xml;
     using Xunit;
 
     [Trait("Category", "Unit")]
@@ -31,7 +31,8 @@ namespace OnvifWebhookBridge.Tests.Events
                 Message = document.DocumentElement!,
                 Topic = new TopicExpressionType
                 {
-                    Any = [document.CreateTextNode(topic)], Dialect = "urn:synthetic:dialect",
+                    Any = [document.CreateTextNode(topic)],
+                    Dialect = "urn:synthetic:dialect",
                     AnyAttr = [namespaceAttribute]
                 }
             };
@@ -85,13 +86,19 @@ namespace OnvifWebhookBridge.Tests.Events
         }
 
         [Theory]
-        [InlineData("true", true)] [InlineData("1", true)]
-        [InlineData("false", false)] [InlineData("0", false)]
-        [InlineData("TRUE", false)] [InlineData(" true ", false)]
+        [InlineData("true", true)]
+        [InlineData("1", true)]
+        [InlineData("false", false)]
+        [InlineData("0", false)]
+        [InlineData("TRUE", false)]
+        [InlineData(" true ", false)]
         public void BooleanComparisonHasOnlyExplicitLexicalValues(string value, bool expected)
         {
             Assert.Equal(expected, RuleMatcher.Matches(Rule(), Event(value)));
-            var text = Rule() with { Condition = new(FieldSection.Data, "Active", "true") };
+            var text = Rule() with
+            {
+                Condition = new(FieldSection.Data, "Active", "true")
+            };
             Assert.Equal(value == "true", RuleMatcher.Matches(text, Event(value)));
         }
 
@@ -99,13 +106,34 @@ namespace OnvifWebhookBridge.Tests.Events
         public void ExactMatchingDistinguishesAliasesCaseSectionsAndMissingFields()
         {
             var e = Event("true");
-            Assert.False(RuleMatcher.Matches(Rule(), e with { Topic = "alias:Detection/Active" }));
-            Assert.False(RuleMatcher.Matches(Rule(), e with { Topic = "s:detection/Active" }));
-            Assert.False(RuleMatcher.Matches(Rule(), e with { CameraId = "Camera" }));
-            Assert.False(RuleMatcher.Matches(Rule() with { Condition = new(FieldSection.Source, "Active", "true") }, e));
-            Assert.False(RuleMatcher.Matches(Rule() with { Condition = new(FieldSection.Data, "active", "true") }, e));
-            Assert.True(RuleMatcher.Matches(Rule() with { Condition = null }, Event("false")));
-            var collision = e with { Source = Array.AsReadOnly(new[] { new EventField("SimpleItem", "Active", "false", "") }) };
+            Assert.False(RuleMatcher.Matches(Rule(), e with
+            {
+                Topic = "alias:Detection/Active"
+            }));
+            Assert.False(RuleMatcher.Matches(Rule(), e with
+            {
+                Topic = "s:detection/Active"
+            }));
+            Assert.False(RuleMatcher.Matches(Rule(), e with
+            {
+                CameraId = "Camera"
+            }));
+            Assert.False(RuleMatcher.Matches(Rule() with
+            {
+                Condition = new(FieldSection.Source, "Active", "true")
+            }, e));
+            Assert.False(RuleMatcher.Matches(Rule() with
+            {
+                Condition = new(FieldSection.Data, "active", "true")
+            }, e));
+            Assert.True(RuleMatcher.Matches(Rule() with
+            {
+                Condition = null
+            }, Event("false")));
+            var collision = e with
+            {
+                Source = Array.AsReadOnly(new[] { new EventField("SimpleItem", "Active", "false", "") })
+            };
             Assert.True(RuleMatcher.Matches(Rule(), collision));
             var lookalike = Event(extra: "<SimpleItem xmlns='urn:synthetic:vendor' Name='Active' Value='true'/>");
             Assert.False(RuleMatcher.Matches(Rule(), lookalike));
@@ -135,7 +163,10 @@ namespace OnvifWebhookBridge.Tests.Events
             var decisions = state.Process(Event("true", "Initialized"), (r, e) =>
             {
                 Assert.Same(e, history.Snapshot().Last());
-                if (r.Id == "first") { throw new InvalidOperationException("synthetic-secret"); }
+                if (r.Id == "first")
+                {
+                    throw new InvalidOperationException("synthetic-secret");
+                }
                 return true;
             });
             Assert.Equal(new[] { DecisionKind.Rejected, DecisionKind.Accepted, DecisionKind.Disabled }, decisions.Select(d => d.Kind));
@@ -213,9 +244,15 @@ namespace OnvifWebhookBridge.Tests.Events
             state.SetRules([Rule() with { Condition = new(FieldSection.Source, "Input", "b") }]);
             Assert.Equal(DecisionKind.Baseline, state.Process(Event(identity: "a"), (_, _) => true).Single().Kind);
             Assert.Equal(DecisionKind.Accepted, state.Process(Event(identity: "b"), (_, _) => true).Single().Kind);
-            var changedKey = Event(identity: "a") with { Key = Array.AsReadOnly(new[] { new EventField("SimpleItem", "Track", "different", "") }) };
+            var changedKey = Event(identity: "a") with
+            {
+                Key = Array.AsReadOnly(new[] { new EventField("SimpleItem", "Track", "different", "") })
+            };
             Assert.Equal(DecisionKind.Baseline, state.Process(changedKey, (_, _) => true).Single().Kind);
-            Assert.Equal(DecisionKind.Accepted, state.Process(changedKey with { Source = Event(identity: "b").Source }, (_, _) => true).Single().Kind);
+            Assert.Equal(DecisionKind.Accepted, state.Process(changedKey with
+            {
+                Source = Event(identity: "b").Source
+            }, (_, _) => true).Single().Kind);
         }
 
         [Fact]
@@ -225,13 +262,25 @@ namespace OnvifWebhookBridge.Tests.Events
             state.SetRules([Rule()]);
             var e = Event();
             var fields = new[] { e.Source[0], new EventField("SimpleItem", "Other", "synthetic", "") };
-            e = e with { Source = Array.AsReadOnly(fields) };
+            e = e with
+            {
+                Source = Array.AsReadOnly(fields)
+            };
             state.Process(e, (_, _) => true);
-            var on = Event("true") with { Source = Array.AsReadOnly(fields.Reverse().ToArray()) };
+            var on = Event("true") with
+            {
+                Source = Array.AsReadOnly(fields.Reverse().ToArray())
+            };
             Assert.Equal(DecisionKind.Accepted, state.Process(on, (_, _) => true).Single().Kind);
-            var duplicate = on with { Source = Array.AsReadOnly(new[] { fields[0], fields[1], fields[1] }) };
+            var duplicate = on with
+            {
+                Source = Array.AsReadOnly(new[] { fields[0], fields[1], fields[1] })
+            };
             Assert.Equal(DecisionKind.Baseline, state.Process(duplicate, (_, _) => true).Single().Kind);
-            var extended = on with { Source = Array.AsReadOnly(new[] { fields[0] with { IdentityMetadata = "synthetic-extra" }, fields[1] }) };
+            var extended = on with
+            {
+                Source = Array.AsReadOnly(new[] { fields[0] with { IdentityMetadata = "synthetic-extra" }, fields[1] })
+            };
             Assert.Equal(DecisionKind.Baseline, state.Process(extended, (_, _) => true).Single().Kind);
         }
 
@@ -284,7 +333,10 @@ namespace OnvifWebhookBridge.Tests.Events
         public void HistoryAndNormalizationBoundBytesCountFieldsAndUnicode()
         {
             var history = new EventHistory();
-            for (var i = 0; i < 110; i++) { history.Add(Event(i.ToString())); }
+            for (var i = 0; i < 110; i++)
+            {
+                history.Add(Event(i.ToString()));
+            }
             Assert.Equal(100, history.Snapshot().Count);
             Assert.Equal("10", history.Snapshot()[0].Data[0].Value);
             var huge = Event(new string('x', 100_000));
@@ -292,8 +344,14 @@ namespace OnvifWebhookBridge.Tests.Events
             Assert.Contains("ContentTruncated", huge.Diagnostics);
             Assert.True(huge.RetainedBytes <= EventNormalizer.MaximumEventBytes);
             Assert.True(Encoding.UTF8.GetByteCount(huge.RawMessageXml) <= EventNormalizer.MaximumStringBytes);
-            Assert.False(RuleMatcher.Matches(Rule() with { Condition = null }, huge));
-            for (var i = 0; i < 110; i++) { history.Add(huge); }
+            Assert.False(RuleMatcher.Matches(Rule() with
+            {
+                Condition = null
+            }, huge));
+            for (var i = 0; i < 110; i++)
+            {
+                history.Add(huge);
+            }
             Assert.True(history.Snapshot().Sum(e => e.RetainedBytes) <= EventHistory.MaximumBytes);
             var many = Event(extra: string.Concat(Enumerable.Repeat("<tt:SimpleItem Name='a' Value='b'/>", 300)));
             Assert.True(many.Truncated);
@@ -317,7 +375,10 @@ namespace OnvifWebhookBridge.Tests.Events
 
         internal sealed class Clock : TimeProvider
         {
-            public long Now { get; set; }
+            public long Now
+            {
+                get; set;
+            }
             public override long TimestampFrequency => 1;
             public override long GetTimestamp() => Now;
         }

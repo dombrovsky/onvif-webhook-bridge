@@ -1,10 +1,10 @@
 namespace OnvifWebhookBridge.Persistence
 {
-    using System.Security.Cryptography;
     using Microsoft.Data.Sqlite;
     using OnvifWebhookBridge.Dispatch;
     using OnvifWebhookBridge.Events;
     using OnvifWebhookBridge.Rules;
+    using System.Security.Cryptography;
     using static SchemaMigrator;
 
     // One process owns this directory. All durable mutations go through this coordinator.
@@ -31,15 +31,28 @@ namespace OnvifWebhookBridge.Persistence
                 if (!File.Exists(database))
                 {
                     var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
-                    if (OperatingSystem.IsLinux()) { options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite; }
+                    if (OperatingSystem.IsLinux())
+                    {
+                        options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                    }
                     using var file = new FileStream(database, options);
                 }
                 using var connection = Open();
                 using (var check = Command(connection, null, "PRAGMA quick_check"))
-                { if (!Equals(check.ExecuteScalar(), "ok")) { throw new StorageException("Corrupt"); } }
+                {
+                    if (!Equals(check.ExecuteScalar(), "ok"))
+                    {
+                        throw new StorageException("Corrupt");
+                    }
+                }
                 Migrate(connection);
                 using (var wal = Command(connection, null, "PRAGMA journal_mode=WAL"))
-                { if (!Equals(wal.ExecuteScalar(), "wal")) { throw new StorageException("JournalMode"); } }
+                {
+                    if (!Equals(wal.ExecuteScalar(), "wal"))
+                    {
+                        throw new StorageException("JournalMode");
+                    }
+                }
                 StorageFiles.Prepare(directory, database);
                 using var transaction = connection.BeginTransaction();
                 var restored = Load(connection, transaction);
@@ -75,7 +88,10 @@ namespace OnvifWebhookBridge.Persistence
                 using var connection = Open();
                 using var transaction = connection.BeginTransaction(deferred: false);
                 var old = Load(connection, transaction);
-                if (old.Revision != expectedRevision) { throw new RevisionConflictException(); }
+                if (old.Revision != expectedRevision)
+                {
+                    throw new RevisionConflictException();
+                }
                 var next = new StoredConfiguration(checked(expectedRevision + 1),
                     cameraEdits.Select(c => c.Resolve(old.Cameras.SingleOrDefault(x => x.Id == c.Id))).ToArray(),
                     ruleEdits.Select(r => r.Resolve(old.Rules.SingleOrDefault(x => x.Rule.Match.Id == r.Id))).ToArray(), old.HasAdministrator);
@@ -96,7 +112,9 @@ namespace OnvifWebhookBridge.Persistence
                         r.Condition?.Name, r.Condition?.ExpectedValue, r.Condition is { } condition ? (int)condition.Comparison : null,
                         r.Enabled, (int)r.Mode, r.Cooldown.Ticks, a.Address.AbsoluteUri, a.Method, a.JsonBody, a.AdditionalAttempts);
                     for (var i = 0; i < a.Headers.Count; i++)
-                    { Execute(connection, transaction, "INSERT INTO Headers VALUES($p0,$p1,$p2,$p3)", r.Id, i, a.Headers[i].Name, a.Headers[i].Value); }
+                    {
+                        Execute(connection, transaction, "INSERT INTO Headers VALUES($p0,$p1,$p2,$p3)", r.Id, i, a.Headers[i].Name, a.Headers[i].Value);
+                    }
                 }
                 Execute(connection, transaction, "UPDATE Configuration SET Revision=$p0 WHERE Id=1", next.Revision);
                 StorageFiles.Prepare(directory, database);
@@ -110,7 +128,9 @@ namespace OnvifWebhookBridge.Persistence
         public bool BootstrapAdministrator(string username, string password) => Guard(() =>
         {
             if (string.IsNullOrWhiteSpace(username) || username.Length > 256 || password.Length is < 12 or > 4096)
-            { throw new ArgumentException("Invalid administrator bootstrap."); }
+            {
+                throw new ArgumentException("Invalid administrator bootstrap.");
+            }
             var salt = RandomNumberGenerator.GetBytes(16);
             var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, 600_000, HashAlgorithmName.SHA256, 32);
             var encoded = "pbkdf2-sha256$600000$" + Convert.ToBase64String(salt) + "$" + Convert.ToBase64String(hash);
@@ -121,8 +141,62 @@ namespace OnvifWebhookBridge.Persistence
                 using var insert = Command(connection, transaction,
                     "INSERT INTO Administrator SELECT 1,$p0,$p1 WHERE NOT EXISTS(SELECT 1 FROM Administrator)", username, encoded);
                 var added = insert.ExecuteNonQuery() == 1;
+                StorageFiles.Prepare(directory, database);
                 transaction.Commit();
                 return added;
+            }
+        });
+
+        internal bool VerifyAdministrator(string username, string password) => Guard(() =>
+        {
+            string? name = null, encoded = null;
+            lock (gate)
+            {
+                using var connection = Open();
+                using var command = Command(connection, null, "SELECT Username,PasswordHash FROM Administrator WHERE Id=1");
+                using var reader = command.ExecuteReader();
+                if (reader.Read())
+                {
+                    name = reader.GetString(0);
+                    encoded = reader.GetString(1);
+                }
+            }
+            // Perform the adaptive work for unknown accounts too. Never return the hash.
+            var parts = encoded?.Split('$');
+            var valid = parts is { Length: 4 } && parts[0] == "pbkdf2-sha256" && parts[1] == "600000";
+            byte[] salt, expected;
+            try
+            {
+                salt = valid ? Convert.FromBase64String(parts![2]) : new byte[16];
+                expected = valid ? Convert.FromBase64String(parts![3]) : new byte[32];
+            }
+            catch (FormatException) { throw new StorageException("InvalidAdministrator"); }
+            if (salt.Length != 16 || expected.Length != 32)
+            {
+                throw new StorageException("InvalidAdministrator");
+            }
+            var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, 600_000, HashAlgorithmName.SHA256, 32);
+            return CryptographicOperations.FixedTimeEquals(actual, expected) && valid && username == name;
+        });
+
+        // Offline, explicitly requested command only; no HTTP reset route.
+        internal void ResetAdministrator(string username, string password) => Guard(() =>
+        {
+            if (string.IsNullOrWhiteSpace(username) || username.Length > 256 || password.Length is < 12 or > 4096)
+            {
+                throw new ArgumentException("Invalid administrator bootstrap.");
+            }
+            var salt = RandomNumberGenerator.GetBytes(16);
+            var encoded = "pbkdf2-sha256$600000$" + Convert.ToBase64String(salt) + "$" +
+                Convert.ToBase64String(Rfc2898DeriveBytes.Pbkdf2(password, salt, 600_000, HashAlgorithmName.SHA256, 32));
+            lock (gate)
+            {
+                using var connection = Open();
+                using var transaction = connection.BeginTransaction(deferred: false);
+                Execute(connection, transaction, "INSERT INTO Administrator VALUES(1,$p0,$p1) ON CONFLICT(Id) DO UPDATE SET Username=$p0,PasswordHash=$p1", username, encoded);
+                StorageFiles.Prepare(directory, database);
+                transaction.Commit();
+                return true;
             }
         });
 
@@ -130,7 +204,13 @@ namespace OnvifWebhookBridge.Persistence
         {
             StorageFiles.Prepare(directory, database);
             var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = database, Mode = SqliteOpenMode.ReadWrite, ForeignKeys = true, Pooling = false, DefaultTimeout = 2 }.ToString());
+            {
+                DataSource = database,
+                Mode = SqliteOpenMode.ReadWrite,
+                ForeignKeys = true,
+                Pooling = false,
+                DefaultTimeout = 2
+            }.ToString());
             try
             {
                 connection.Open();
@@ -146,13 +226,20 @@ namespace OnvifWebhookBridge.Persistence
             {
                 using var foreignKeys = Command(connection, transaction, "PRAGMA foreign_key_check");
                 using (var reader = foreignKeys.ExecuteReader())
-                { if (reader.Read()) { throw new StorageException("InvalidReferences"); } }
+                {
+                    if (reader.Read())
+                    {
+                        throw new StorageException("InvalidReferences");
+                    }
+                }
                 var value = ReadRows(connection, transaction);
                 Validate(value);
                 return value;
             }
             catch (Exception error) when (error is ArgumentException or InvalidCastException or OverflowException)
-            { throw new StorageException("InvalidConfiguration"); }
+            {
+                throw new StorageException("InvalidConfiguration");
+            }
         }
 
         private static StoredConfiguration ReadRows(SqliteConnection connection, SqliteTransaction transaction)
@@ -162,7 +249,12 @@ namespace OnvifWebhookBridge.Persistence
             var cameras = new List<CameraConfiguration>();
             using (var command = Command(connection, transaction, "SELECT Id,Name,Endpoint,Username,Password,Enabled FROM Cameras LIMIT 65"))
             using (var reader = command.ExecuteReader())
-            { while (reader.Read()) { cameras.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetBoolean(5))); } }
+            {
+                while (reader.Read())
+                {
+                    cameras.Add(new(reader.GetString(0), reader.GetString(1), reader.GetString(2), Text(reader, 3), Text(reader, 4), reader.GetBoolean(5)));
+                }
+            }
             var headers = new Dictionary<string, List<ActionHeader>>(StringComparer.Ordinal);
             using (var command = Command(connection, transaction, "SELECT RuleId,Name,Value FROM Headers ORDER BY RuleId,Position LIMIT 8449"))
             using (var reader = command.ExecuteReader())
@@ -170,7 +262,10 @@ namespace OnvifWebhookBridge.Persistence
                 while (reader.Read())
                 {
                     var id = reader.GetString(0);
-                    if (!headers.TryGetValue(id, out var list)) { headers[id] = list = []; }
+                    if (!headers.TryGetValue(id, out var list))
+                    {
+                        headers[id] = list = [];
+                    }
                     list.Add(new(reader.GetString(1), reader.GetString(2)));
                 }
             }
@@ -194,19 +289,30 @@ namespace OnvifWebhookBridge.Persistence
 
         private static string? Text(SqliteDataReader reader, int index) => reader.IsDBNull(index) ? null : reader.GetString(index);
         private static void Execute(SqliteConnection connection, SqliteTransaction? transaction, string sql, params object?[] values)
-        { using var command = Command(connection, transaction, sql, values); command.ExecuteNonQuery(); }
+        {
+            using var command = Command(connection, transaction, sql, values);
+            command.ExecuteNonQuery();
+        }
         private static void Validate(StoredConfiguration value)
         {
-            if (value.Revision < 0 || value.Rules.Any(r => r.Name.Length > 4096)) { throw new ArgumentException("Invalid configuration."); }
+            if (value.Revision < 0 || value.Rules.Any(r => r.Name.Length > 4096))
+            {
+                throw new ArgumentException("Invalid configuration.");
+            }
             var history = new EventHistory();
             var validator = new CameraPipeline(new RuleState(history), new DispatchQueue(), TimeProvider.System);
             validator.ConfigureCameras(value.Cameras, value.Rules.Select(r => r.Rule));
         }
         private static T Guard<T>(Func<T> operation)
         {
-            try { return operation(); }
+            try
+            {
+                return operation();
+            }
             catch (Exception error) when (error is SqliteException or IOException or UnauthorizedAccessException)
-            { throw new StorageException("UnavailableOrInvalid"); }
+            {
+                throw new StorageException("UnavailableOrInvalid");
+            }
         }
     }
 }

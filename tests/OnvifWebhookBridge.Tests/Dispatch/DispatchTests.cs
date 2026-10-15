@@ -1,14 +1,14 @@
 namespace OnvifWebhookBridge.Tests.Dispatch
 {
-    using System.Net;
-    using System.Net.Http.Headers;
-    using System.Text;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using OnvifWebhookBridge.Dispatch;
     using OnvifWebhookBridge.Events;
     using OnvifWebhookBridge.Rules;
     using OnvifWebhookBridge.Tests.Events;
+    using System.Net;
+    using System.Net.Http.Headers;
+    using System.Text;
     using Xunit;
 
     [Trait("Category", "Unit")]
@@ -68,21 +68,36 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             var queue = new DispatchQueue();
             var action = Rule().Action;
             DispatchJob Job(string id) => new(Guid.NewGuid(), id, 1, 1, action, false, 0, default);
-            for (var i = 0; i < 25; i++) { Assert.True(queue.TryEnqueue(Job("busy"))); }
+            for (var i = 0; i < 25; i++)
+            {
+                Assert.True(queue.TryEnqueue(Job("busy")));
+            }
             Assert.False(queue.TryEnqueue(Job("busy")));
             Assert.True(queue.TryEnqueue(Job("other")));
-            for (var i = 0; i < 25; i++) { Assert.True(queue.TryEnqueue(Job("third"))); }
-            for (var i = 0; i < 25; i++) { Assert.True(queue.TryEnqueue(Job("fourth"))); }
-            for (var i = 0; i < 24; i++) { Assert.True(queue.TryEnqueue(Job("fifth"))); }
+            for (var i = 0; i < 25; i++)
+            {
+                Assert.True(queue.TryEnqueue(Job("third")));
+            }
+            for (var i = 0; i < 25; i++)
+            {
+                Assert.True(queue.TryEnqueue(Job("fourth")));
+            }
+            for (var i = 0; i < 24; i++)
+            {
+                Assert.True(queue.TryEnqueue(Job("fifth")));
+            }
             Assert.False(queue.TryEnqueue(Job("overflow")));
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var first = await queue.TakeAsync(deadline.Token);
             var other = await queue.TakeAsync(deadline.Token);
-            Assert.Equal("busy", first.RuleId); Assert.Equal("other", other.RuleId);
+            Assert.Equal("busy", first.RuleId);
+            Assert.Equal("other", other.RuleId);
             var third = await queue.TakeAsync(deadline.Token);
             var fourth = await queue.TakeAsync(deadline.Token);
             var fifth = await queue.TakeAsync(deadline.Token);
-            Assert.Equal("third", third.RuleId); Assert.Equal("fourth", fourth.RuleId); Assert.Equal("fifth", fifth.RuleId);
+            Assert.Equal("third", third.RuleId);
+            Assert.Equal("fourth", fourth.RuleId);
+            Assert.Equal("fifth", fifth.RuleId);
             var blocked = queue.TakeAsync(deadline.Token);
             Assert.False(blocked.IsCompleted);
             queue.Complete(first);
@@ -96,12 +111,22 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         public async Task OverflowPreservesHistoryAndDoesNotConsumeCooldown()
         {
             var h = new Harness();
-            h.Configure(Rule() with { Match = Rule().Match with { Cooldown = TimeSpan.FromMinutes(1) } });
-            for (var i = 0; i < 25; i++) { Assert.True(h.Pipeline.ManualTest("rule")); }
+            h.Configure(Rule() with
+            {
+                Match = Rule().Match with
+                {
+                    Cooldown = TimeSpan.FromMinutes(1)
+                }
+            });
+            for (var i = 0; i < 25; i++)
+            {
+                Assert.True(h.Pipeline.ManualTest("rule"));
+            }
             Assert.Equal(DecisionKind.Rejected, h.Pipeline.Process(Phase2Tests.Event("true"))[0].Kind);
             Assert.Single(h.History.Snapshot());
             Assert.Equal(ExecutionResult.Overflow, h.Pipeline.Status.Single().Result);
-            var first = await h.Queue.TakeAsync(default); h.Queue.Complete(first);
+            var first = await h.Queue.TakeAsync(default);
+            h.Queue.Complete(first);
             Assert.Equal(DecisionKind.Accepted, h.Pipeline.Process(Phase2Tests.Event("true"))[0].Kind);
             Assert.Equal(DecisionKind.Cooldown, h.Pipeline.Process(Phase2Tests.Event("true"))[0].Kind);
             Assert.True(h.Pipeline.ManualTest("rule") == false); // still full; manual bypasses cooldown, not limits
@@ -121,7 +146,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             var responses = new List<TrackedContent>();
             var factory = new Factory((_, _) =>
             {
-                var content = new TrackedContent(); responses.Add(content);
+                var content = new TrackedContent();
+                responses.Add(content);
                 var response = new HttpResponseMessage((HttpStatusCode)code) { Content = content };
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
                 return Task.FromResult(response);
@@ -129,7 +155,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: additional)));
             await h.Deliver(factory);
             var status = h.Pipeline.Status.Single();
-            Assert.Equal(expected, status.Attempts); Assert.Equal(code, status.StatusCode);
+            Assert.Equal(expected, status.Attempts);
+            Assert.Equal(code, status.StatusCode);
             Assert.Equal(code == 200 ? ExecutionResult.Accepted : ExecutionResult.HttpFailure, status.Result);
             Assert.All(responses, r => { Assert.True(r.Disposed); Assert.False(r.Read); });
         }
@@ -139,7 +166,13 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         {
             var h = new Harness();
             var a = Rule("a", new("http://synthetic.invalid/a", "POST", [new("Authorization", FakeSecret)], "{\"synthetic\":true}"));
-            a = a with { Match = a.Match with { Cooldown = TimeSpan.FromMinutes(1) } };
+            a = a with
+            {
+                Match = a.Match with
+                {
+                    Cooldown = TimeSpan.FromMinutes(1)
+                }
+            };
             var b = Rule("b");
             h.Configure(a, b);
             var calls = 0;
@@ -157,7 +190,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                 return new(HttpStatusCode.NoContent);
             });
             Assert.All(h.Pipeline.Process(Phase2Tests.Event("true")), d => Assert.Equal(DecisionKind.Accepted, d.Kind));
-            await h.DrainOne(factory); await h.DrainOne(factory);
+            await h.DrainOne(factory);
+            await h.DrainOne(factory);
             Assert.Equal(ExecutionResult.TransportFailure, h.Pipeline.Status.Single(s => s.RuleId == "a").Result);
             Assert.Equal(ExecutionResult.Accepted, h.Pipeline.Status.Single(s => s.RuleId == "b").Result);
             Assert.DoesNotContain(FakeSecret, string.Join(" ", h.Pipeline.Status));
@@ -172,15 +206,43 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [InlineData("delete")]
         public async Task ObsoleteQueuedActionsNeverSend(string mutation)
         {
-            var h = new Harness(); var rule = Rule(); h.Configure(rule);
+            var h = new Harness();
+            var rule = Rule();
+            h.Configure(rule);
             Assert.True(h.Pipeline.ManualTest("rule"));
             switch (mutation)
             {
-                case "rule": h.Configure(rule with { Match = rule.Match with { Topic = "changed" } }); break;
-                case "action": h.Configure(rule with { Action = new("http://changed.invalid") }); break;
-                case "camera": h.Pipeline.Configure(Camera with { Password = "synthetic", Username = "synthetic" }, [rule]); break;
-                case "disable": h.Pipeline.Configure(Camera with { Enabled = false }, [rule]); break;
-                case "delete": h.Pipeline.Configure(null, []); break;
+                case "rule":
+                    h.Configure(rule with
+                    {
+                        Match = rule.Match with
+                        {
+                            Topic = "changed"
+                        }
+                    });
+                    break;
+                case "action":
+                    h.Configure(rule with
+                    {
+                        Action = new("http://changed.invalid")
+                    });
+                    break;
+                case "camera":
+                    h.Pipeline.Configure(Camera with
+                    {
+                        Password = "synthetic",
+                        Username = "synthetic"
+                    }, [rule]);
+                    break;
+                case "disable":
+                    h.Pipeline.Configure(Camera with
+                    {
+                        Enabled = false
+                    }, [rule]);
+                    break;
+                case "delete":
+                    h.Pipeline.Configure(null, []);
+                    break;
             }
             var factory = new Factory((_, _) => throw new InvalidOperationException("must not send"));
             await h.DrainOne(factory);
@@ -190,7 +252,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task RetryAfterBeyondDeadlineDoesNotRetryAndCancellationStopsTransport()
         {
-            var h = new Harness(); h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)));
+            var h = new Harness();
+            h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)));
             await h.Deliver(new Factory((_, _) =>
             {
                 var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
@@ -203,8 +266,14 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             Assert.True(h.Pipeline.ManualTest("rule", cancel.Token));
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var delivery = h.DrainOne(new Factory(async (_, token) =>
-            { entered.SetResult(); await Task.Delay(Timeout.Infinite, token); return new(HttpStatusCode.OK); }));
-            await entered.Task; cancel.Cancel(); await delivery;
+            {
+                entered.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
+                return new(HttpStatusCode.OK);
+            }));
+            await entered.Task;
+            cancel.Cancel();
+            await delivery;
             Assert.Equal(ExecutionResult.Cancelled, h.Pipeline.Status.Single().Result);
         }
 
@@ -232,7 +301,9 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task DeadlineIncludesQueueTimeAndAttemptTimeoutUsesControllableClock()
         {
-            var clock = new TestClock(); var h = new Harness(clock); h.Configure(Rule());
+            var clock = new TestClock();
+            var h = new Harness(clock);
+            h.Configure(Rule());
             Assert.True(h.Pipeline.ManualTest("rule"));
             clock.Advance(TimeSpan.FromSeconds(30));
             var noSend = new Factory((_, _) => throw new InvalidOperationException("must not send"));
@@ -241,7 +312,11 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             Assert.Equal(0, noSend.Calls);
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var delivery = h.Deliver(new Factory(async (_, token) =>
-            { entered.SetResult(); await Task.Delay(Timeout.Infinite, token); return new(HttpStatusCode.OK); }));
+            {
+                entered.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
+                return new(HttpStatusCode.OK);
+            }));
             await entered.Task;
             clock.Advance(TimeSpan.FromSeconds(10));
             await delivery;
@@ -252,20 +327,30 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task EditDuringRetryDelayInvalidatesNextAttempt()
         {
-            var clock = new TestClock(); var h = new Harness(clock);
-            var action = Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)); h.Configure(action);
+            var clock = new TestClock();
+            var h = new Harness(clock);
+            var action = Rule(action: new("http://synthetic.invalid", additionalAttempts: 2));
+            h.Configure(action);
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var factory = new Factory((_, _) =>
             {
                 var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(1));
-                entered.SetResult(); return Task.FromResult(response);
+                entered.SetResult();
+                return Task.FromResult(response);
             });
             var delivery = h.Deliver(factory);
             await entered.Task;
             // Deliver runs synchronously through response handling and schedules its timer before returning.
-            h.Configure(action with { Match = action.Match with { Enabled = false } });
-            clock.Advance(TimeSpan.FromSeconds(1)); await delivery;
+            h.Configure(action with
+            {
+                Match = action.Match with
+                {
+                    Enabled = false
+                }
+            });
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await delivery;
             Assert.Equal(1, factory.Calls);
             Assert.Equal(ExecutionResult.Stale, h.Pipeline.LastExecutions.Single().Result);
         }
@@ -273,7 +358,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task TotalDeadlineCancelsAnAttemptAfterRetryDelay()
         {
-            var clock = new TestClock(); var h = new Harness(clock);
+            var clock = new TestClock();
+            var h = new Harness(clock);
             h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)));
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var calls = 0;
@@ -285,11 +371,14 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                     response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(20));
                     return response;
                 }
-                entered.SetResult(); await Task.Delay(Timeout.Infinite, token); return new(HttpStatusCode.OK);
+                entered.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
+                return new(HttpStatusCode.OK);
             }));
             clock.Advance(TimeSpan.FromSeconds(20));
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            clock.Advance(TimeSpan.FromSeconds(10)); await delivery;
+            clock.Advance(TimeSpan.FromSeconds(10));
+            await delivery;
             Assert.Equal(2, calls);
             Assert.Equal(ExecutionResult.Expired, h.Pipeline.LastExecutions.Single().Result);
             Assert.Equal(TimeSpan.FromSeconds(30), h.Pipeline.LastExecutions.Single().Duration);
@@ -298,16 +387,36 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public void CameraEditKeepsInspectorButRejectsOldPullResultsAndActionEditResetsOnlyItsRule()
         {
-            var h = new Harness(); var a = Rule("a"); var b = Rule("b");
-            a = a with { Match = a.Match with { Cooldown = TimeSpan.FromMinutes(1) } };
-            b = b with { Match = b.Match with { Cooldown = TimeSpan.FromMinutes(1) } };
+            var h = new Harness();
+            var a = Rule("a");
+            var b = Rule("b");
+            a = a with
+            {
+                Match = a.Match with
+                {
+                    Cooldown = TimeSpan.FromMinutes(1)
+                }
+            };
+            b = b with
+            {
+                Match = b.Match with
+                {
+                    Cooldown = TimeSpan.FromMinutes(1)
+                }
+            };
             h.Configure(a, b);
             Assert.All(h.Pipeline.Process(Phase2Tests.Event("true")), d => Assert.Equal(DecisionKind.Accepted, d.Kind));
-            h.Configure(a with { Action = new("http://changed.invalid") }, b);
+            h.Configure(a with
+            {
+                Action = new("http://changed.invalid")
+            }, b);
             var decisions = h.Pipeline.Process(Phase2Tests.Event("true"));
             Assert.Equal(DecisionKind.Accepted, decisions[0].Kind);
             Assert.Equal(DecisionKind.Cooldown, decisions[1].Kind);
-            h.Pipeline.Configure(Camera with { Name = "Edited synthetic" }, [a, b]);
+            h.Pipeline.Configure(Camera with
+            {
+                Name = "Edited synthetic"
+            }, [a, b]);
             Assert.All(h.Pipeline.Process(Phase2Tests.Event("true"), Camera), d => Assert.Equal(DecisionKind.Disabled, d.Kind));
             Assert.Equal(3, h.History.Snapshot().Count);
         }
@@ -315,7 +424,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task IdentifiableSelfTargetNeverSends()
         {
-            var h = new Harness(); h.Configure(Rule());
+            var h = new Harness();
+            h.Configure(Rule());
             h.Pipeline.SetSelfOrigins([new("http://recorder.invalid")]);
             var factory = new Factory((_, _) => throw new InvalidOperationException("must not send"));
             await h.Deliver(factory);
@@ -326,23 +436,37 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         [Fact]
         public async Task FourActiveJobsAndOnePerRuleShutdownCancelsActiveAndPending()
         {
-            var h = new Harness(); h.Configure(Enumerable.Range(0, 6).Select(i => Rule("r" + i)).ToArray());
+            var h = new Harness();
+            h.Configure(Enumerable.Range(0, 6).Select(i => Rule("r" + i)).ToArray());
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var active = 0; var peak = 0; var calls = 0;
+            var active = 0;
+            var peak = 0;
+            var calls = 0;
             var factory = new Factory(async (_, token) =>
             {
                 var current = Interlocked.Increment(ref active);
                 Interlocked.Exchange(ref peak, Math.Max(peak, current));
-                if (Interlocked.Increment(ref calls) == 4) { entered.SetResult(); }
-                try { await Task.Delay(Timeout.Infinite, token); return new(HttpStatusCode.OK); }
+                if (Interlocked.Increment(ref calls) == 4)
+                {
+                    entered.SetResult();
+                }
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, token);
+                    return new(HttpStatusCode.OK);
+                }
                 finally { Interlocked.Decrement(ref active); }
             });
-            foreach (var i in Enumerable.Range(0, 6)) { Assert.True(h.Pipeline.ManualTest("r" + i)); }
+            foreach (var i in Enumerable.Range(0, 6))
+            {
+                Assert.True(h.Pipeline.ManualTest("r" + i));
+            }
             Assert.True(h.Pipeline.ManualTest("r0"));
             using var dispatcher = new HttpActionDispatcher(h.Queue, h.Pipeline, factory, TimeProvider.System);
             await dispatcher.StartAsync(default);
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(4, peak); Assert.Equal(4, calls);
+            Assert.Equal(4, peak);
+            Assert.Equal(4, calls);
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await dispatcher.StopAsync(stop.Token);
             Assert.Equal(0, active);
@@ -353,42 +477,87 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         {
             public EventHistory History { get; } = new();
             public DispatchQueue Queue { get; } = new();
-            public CameraPipeline Pipeline { get; }
-            public TimeProvider Clock { get; }
-            public Harness(TimeProvider? clock = null) { Clock = clock ?? TimeProvider.System; Pipeline = new(new(History, Clock), Queue, Clock); }
+            public CameraPipeline Pipeline
+            {
+                get;
+            }
+            public TimeProvider Clock
+            {
+                get;
+            }
+            public Harness(TimeProvider? clock = null)
+            {
+                Clock = clock ?? TimeProvider.System;
+                Pipeline = new(new(History, Clock), Queue, Clock);
+            }
             public void Configure(params ActionRule[] rules) => Pipeline.Configure(Camera, rules);
-            public async Task Deliver(IHttpClientFactory factory) { Assert.True(Pipeline.ManualTest("rule")); await DrainOne(factory); }
+            public async Task Deliver(IHttpClientFactory factory)
+            {
+                Assert.True(Pipeline.ManualTest("rule"));
+                await DrainOne(factory);
+            }
             public async Task DrainOne(IHttpClientFactory factory)
             {
                 using var dispatcher = new HttpActionDispatcher(Queue, Pipeline, factory, Clock);
                 var job = await Queue.TakeAsync(default);
-                try { await dispatcher.Deliver(job, default); } finally { Queue.Complete(job); }
+                try
+                {
+                    await dispatcher.Deliver(job, default);
+                }
+                finally { Queue.Complete(job); }
             }
         }
         private sealed class Factory(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : IHttpClientFactory
         {
-            public int Calls { get; private set; }
+            public int Calls
+            {
+                get; private set;
+            }
             public HttpClient CreateClient(string name) => new(new Handler((r, t) => { Calls++; return send(r, t); })) { Timeout = Timeout.InfiniteTimeSpan };
         }
         private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
-        { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => send(request, token); }
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => send(request, token);
+        }
         private sealed class TrackedContent : HttpContent
         {
-            public bool Disposed { get; private set; }
-            public bool Read { get; private set; }
-            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) { Read = true; throw new InvalidOperationException("body must not be read"); }
-            protected override bool TryComputeLength(out long length) { length = 0; return false; }
-            protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
+            public bool Disposed
+            {
+                get; private set;
+            }
+            public bool Read
+            {
+                get; private set;
+            }
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+            {
+                Read = true;
+                throw new InvalidOperationException("body must not be read");
+            }
+            protected override bool TryComputeLength(out long length)
+            {
+                length = 0;
+                return false;
+            }
+            protected override void Dispose(bool disposing)
+            {
+                Disposed = true;
+                base.Dispose(disposing);
+            }
         }
         private sealed class CaptureLogger : ILoggerProvider, ILogger
         {
             public StringBuilder Text { get; } = new();
             public ILogger CreateLogger(string categoryName) => this;
-            public void Dispose() { }
+            public void Dispose()
+            {
+            }
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel logLevel) => true;
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            { Text.AppendLine(formatter(state, exception)); }
+            {
+                Text.AppendLine(formatter(state, exception));
+            }
         }
     }
 }

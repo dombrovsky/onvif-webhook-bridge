@@ -1,9 +1,5 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Net;
-    using System.Net.Http.Json;
-    using System.Text.Json.Serialization;
-    using System.Xml;
     using OnvifWebhookBridge.Events;
     using OnvifWebhookBridge.Onvif;
     using OnvifWebhookBridge.Rules;
@@ -11,6 +7,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
     using SharpOnvifClient.Events;
     using SharpOnvifCommon.Security;
     using SharpOnvifCommon.Soap;
+    using System.Net;
+    using System.Net.Http.Json;
+    using System.Text.Json.Serialization;
+    using System.Xml;
 
     // Shared by xUnit and the published native runner; no alternate ONVIF fixture.
     internal static class SimulatorPath
@@ -39,14 +39,23 @@ namespace OnvifWebhookBridge.Tests.Onvif
             Check(e.RawMessageXml.Contains("Extension", StringComparison.Ordinal) && e.Source[0].IdentityMetadata.Length > 0, "UnitExtension");
             var rule = new ForwardingRule("unit", "camera", e.Topic, new(FieldSection.Data, "Flag", "true", ComparisonMode.Boolean));
             Check(RuleMatcher.Matches(rule, e), "UnitBooleanDuplicate");
-            Check(!RuleMatcher.Matches(rule with { Topic = "alias:Unit/Flag" }, e), "UnitAliasExact");
+            Check(!RuleMatcher.Matches(rule with
+            {
+                Topic = "alias:Unit/Flag"
+            }, e), "UnitAliasExact");
             var history = new EventHistory();
-            for (var i = 0; i < 110; i++) { history.Add(e); }
+            for (var i = 0; i < 110; i++)
+            {
+                history.Add(e);
+            }
             Check(history.Snapshot().Count == 100, "UnitHistoryCount");
             document.DocumentElement!.InnerText = new string('x', 100_000);
             var large = new EventNormalizer().Normalize(n, "camera", "Synthetic", DateTimeOffset.UnixEpoch);
             Check(large.Truncated && large.RetainedBytes <= EventNormalizer.MaximumEventBytes, "UnitXmlCap");
-            for (var i = 0; i < 100; i++) { history.Add(large); }
+            for (var i = 0; i < 100; i++)
+            {
+                history.Add(large);
+            }
             Check(history.Snapshot().Sum(item => item.RetainedBytes) <= EventHistory.MaximumBytes, "UnitHistoryBytes");
         }
 
@@ -110,7 +119,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
                                 Check(ReferenceEquals(history.Snapshot().Last(), candidate), "HistoryBeforeAdmission");
                                 return true;
                             });
-                            if (e.Topic != topic) { continue; }
+                            if (e.Topic != topic)
+                            {
+                                continue;
+                            }
                             Check(!e.Truncated && e.CameraTime is not null && e.RawMessageXml.Contains("SimpleItem", StringComparison.Ordinal), "Preservation");
                             Check(e.Data.Any(f => f.Name == "State" && f.Value == (value ? "true" : "false")), "RawState");
                             Check(decisions[0].Kind == expected[index], "TransitionDecision");
@@ -124,16 +136,35 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 Check(last is not null && history.Snapshot().Count >= 5, "HistoryIncludesFalseAndRepeats");
                 rules.ResetCamera("camera");
                 Check(rules.Process(last!, (_, _) => true)[0].Kind == DecisionKind.Baseline, "EpochBaseline");
-                Check(!RuleMatcher.Matches(transition with { Topic = topic.ToLowerInvariant() }, last!), "ExactTopic");
-                Check(!RuleMatcher.Matches(transition with { Condition = condition with { Comparison = ComparisonMode.Text, ExpectedValue = "1" } }, last!), "TextMode");
-                Check(RuleMatcher.Matches(transition with { Condition = condition with { ExpectedValue = "1" } }, last!), "BooleanMode");
+                Check(!RuleMatcher.Matches(transition with
+                {
+                    Topic = topic.ToLowerInvariant()
+                }, last!), "ExactTopic");
+                Check(!RuleMatcher.Matches(transition with
+                {
+                    Condition = condition with
+                    {
+                        Comparison = ComparisonMode.Text,
+                        ExpectedValue = "1"
+                    }
+                }, last!), "TextMode");
+                Check(RuleMatcher.Matches(transition with
+                {
+                    Condition = condition with
+                    {
+                        ExpectedValue = "1"
+                    }
+                }, last!), "BooleanMode");
             }
             finally { await client.PullPointUnsubscribeAsync(address!).WaitAsync(TimeSpan.FromSeconds(5)); }
         }
 
         private static void Check(bool condition, string category)
         {
-            if (!condition) { throw new InvalidOperationException(category); }
+            if (!condition)
+            {
+                throw new InvalidOperationException(category);
+            }
         }
         private static async Task<HttpResponseMessage> Post<T>(HttpClient client, string path, T body,
             System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> metadata, CancellationToken token)
@@ -144,7 +175,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
         }
         private sealed class MonotonicClock : TimeProvider
         {
-            public long Now { get; set; }
+            public long Now
+            {
+                get; set;
+            }
             public override long TimestampFrequency => 1;
             public override long GetTimestamp() => Now;
         }

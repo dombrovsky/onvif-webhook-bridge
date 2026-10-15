@@ -11,5 +11,9 @@
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/LifecyclePath.cs" Link="LifecyclePath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Persistence/StoragePath.cs" Link="StoragePath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/PersistencePath.cs" Link="PersistencePath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/SecurityPath.cs" Link="SecurityPath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/ApiPath.cs" Link="ApiPath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/AuthenticationPath.cs" Link="AuthenticationPath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Web/ExecutablePath.cs" Link="ExecutablePath.cs" />
   </ItemGroup>
 </Project>

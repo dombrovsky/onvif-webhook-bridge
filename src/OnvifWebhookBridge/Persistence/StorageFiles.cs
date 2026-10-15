@@ -11,27 +11,52 @@ namespace OnvifWebhookBridge.Persistence
         {
             if (!Directory.Exists(directory))
             {
-                if (OperatingSystem.IsLinux()) { Directory.CreateDirectory(directory, DirectoryMode); }
-                else { Directory.CreateDirectory(directory); }
+                if (OperatingSystem.IsLinux())
+                {
+                    Directory.CreateDirectory(directory, DirectoryMode);
+                }
+                else
+                {
+                    Directory.CreateDirectory(directory);
+                }
             }
             Restrict(directory, true);
             foreach (var path in new[] { database, database + "-wal", database + "-shm", database + "-journal" })
-            { if (File.Exists(path) || Directory.Exists(path)) { Restrict(path, false); } }
+            {
+                if (File.Exists(path) || Directory.Exists(path))
+                {
+                    Restrict(path, false);
+                }
+            }
         }
 
         internal static void Restrict(string path, bool directory)
         {
-            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) { throw new StorageException("UnsafeFile"); }
-            if (!OperatingSystem.IsLinux()) { return; }
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new StorageException("UnsafeFile");
+            }
+            if (!OperatingSystem.IsLinux())
+            {
+                return;
+            }
             if (Statx(-100, path, 256, 0x7ff, out var stat) != 0 || stat.Uid != GetEffectiveUserId() ||
                 (stat.Mode & 0xf000) != (directory ? 0x4000 : 0x8000))
-            { throw new StorageException("Ownership"); }
+            {
+                throw new StorageException("Ownership");
+            }
             var required = directory ? DirectoryMode : FileMode;
             var mode = File.GetUnixFileMode(path);
             // Do not turn deliberately read-only storage into writable storage.
-            if ((mode & required) != required) { throw new StorageException("Permissions"); }
+            if ((mode & required) != required)
+            {
+                throw new StorageException("Permissions");
+            }
             File.SetUnixFileMode(path, required);
-            if (File.GetUnixFileMode(path) != required) { throw new StorageException("Permissions"); }
+            if (File.GetUnixFileMode(path) != required)
+            {
+                throw new StorageException("Permissions");
+            }
         }
 
         [StructLayout(LayoutKind.Explicit, Size = 256)]

@@ -1,11 +1,11 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Net;
-    using System.Xml.Linq;
     using OnvifWebhookBridge.Onvif;
     using SharpOnvifClient.Events;
     using SharpOnvifCommon.Security;
     using SharpOnvifCommon.Soap;
+    using System.Net;
+    using System.Xml.Linq;
     using Xunit;
 
     public sealed class AddressedAuthenticationTests

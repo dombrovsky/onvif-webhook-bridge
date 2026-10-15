@@ -12,19 +12,26 @@ namespace OnvifWebhookBridge.Events
         {
             ArgumentNullException.ThrowIfNull(notification);
             if (notification.RetainedBytes is < 0 or > EventNormalizer.MaximumEventBytes)
-            { throw new ArgumentOutOfRangeException(nameof(notification)); }
+            {
+                throw new ArgumentOutOfRangeException(nameof(notification));
+            }
             lock (gate)
             {
                 events.Enqueue(notification);
                 bytes += notification.RetainedBytes;
                 while (events.Count > MaximumCount || bytes > MaximumBytes)
-                { bytes -= events.Dequeue().RetainedBytes; }
+                {
+                    bytes -= events.Dequeue().RetainedBytes;
+                }
             }
         }
 
         public IReadOnlyList<NormalizedEvent> Snapshot()
         {
-            lock (gate) { return Array.AsReadOnly(events.ToArray()); }
+            lock (gate)
+            {
+                return Array.AsReadOnly(events.ToArray());
+            }
         }
     }
 }

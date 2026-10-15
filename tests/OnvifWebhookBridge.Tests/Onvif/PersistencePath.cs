@@ -1,8 +1,5 @@
 namespace OnvifWebhookBridge.Tests.Onvif
 {
-    using System.Collections.Concurrent;
-    using System.Net;
-    using System.Net.Http.Json;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Hosting.Server;
@@ -17,6 +14,9 @@ namespace OnvifWebhookBridge.Tests.Onvif
     using OnvifWebhookBridge.Persistence;
     using OnvifWebhookBridge.Rules;
     using OnvifWebhookBridge.Tests.Persistence;
+    using System.Collections.Concurrent;
+    using System.Net;
+    using System.Net.Http.Json;
     using static OnvifWebhookBridge.Tests.Persistence.StoragePath;
 
     // Actual onvifsim + local recorder, same path under JIT and NativeAOT.
@@ -92,11 +92,16 @@ namespace OnvifWebhookBridge.Tests.Onvif
                     var store = host.Services.GetRequiredService<ConfigurationStore>();
                     var current = pipeline.Cameras.Single(c => c.Id == "persisted");
                     using (var connection = data.Open())
-                    { Execute(connection, "CREATE TRIGGER FailSave BEFORE INSERT ON Cameras BEGIN SELECT RAISE(ABORT,'synthetic'); END"); }
+                    {
+                        Execute(connection, "CREATE TRIGGER FailSave BEFORE INSERT ON Cameras BEGIN SELECT RAISE(ABORT,'synthetic'); END");
+                    }
                     Throws<StorageException>(() => store.Save(1 + pass * 2, [Camera(false)],
                         [Rule("occurrence", OccurrenceMode.Occurrence), Rule("transition", OccurrenceMode.Transition)]));
                     Check(ReferenceEquals(current, pipeline.Cameras.Single(c => c.Id == "persisted")), "FailedSavePreservesWorker");
-                    using (var connection = data.Open()) { Execute(connection, "DROP TRIGGER FailSave"); }
+                    using (var connection = data.Open())
+                    {
+                        Execute(connection, "DROP TRIGGER FailSave");
+                    }
                     var revision = store.Save(1 + pass * 2, [Camera(false)],
                         [Rule("occurrence", OccurrenceMode.Occurrence), Rule("transition", OccurrenceMode.Transition)]);
                     await Until(() => supervisor.Status.Single().State == "Disabled");
@@ -122,7 +127,12 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 Check(response.IsSuccessStatusCode, "PersistenceTrigger");
             }
             async Task Until(Func<bool> condition)
-            { while (!condition()) { await Task.Delay(20, token); } }
+            {
+                while (!condition())
+                {
+                    await Task.Delay(20, token);
+                }
+            }
         }
     }
 }
