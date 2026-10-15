@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated 2026-10-15 after phase 3. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–3 deliver generic in-memory matching and single-camera HTTP forwarding with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset mapping checks remain pending. The host exposes only health and starts without camera/action configuration. Phases 4–8 remain future product work. Each phase remains independently reviewable.
+Planning baseline: 2026-10-14; updated 2026-10-15 for phase 4. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–3 deliver generic in-memory matching and single-camera HTTP forwarding with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset mapping checks remain pending. The host exposes only health and starts without camera/action configuration. Phase 4 adds independent camera supervision and runtime reconciliation; see [lifecycle verification](docs/LIFECYCLE_VERIFICATION.md) for passing JIT/onvifsim and Linux x64 NativeAOT gates and pending hardware checks. Phases 5–8 remain future product work. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -132,6 +132,10 @@ Phase 3 admission decision (2026-10-15): apply a 25-pending-job per-rule quota w
 **Tests/verification:** unit tests may use a fake handler for request construction, headers isolated across destinations, response disposal, 2xx/4xx/5xx/408/429, Retry-After cap, timeout/transport cancellation, zero/two additional attempts, duplicate-effect caveat, overflow, per-rule serialization and fairness. Integration tests must use onvifsim to generate notifications and a local HTTP capture endpoint to verify end-to-end dispatch. Capture logs containing deliberately seeded fake secrets and assert absence. A real external destination action is optional and must be separately authorized; HTTP status alone does not verify destination-side effect.
 
 ## Phase 4 — Multiple independent cameras and resilient lifecycle
+
+**Status: complete — generic in-memory multiple-camera lifecycle; required automated gates passed.** Real-device activation/reset and outage/recovery gates remain pending. See [lifecycle evidence and handoff](docs/LIFECYCLE_VERIFICATION.md).
+
+**Resource-bound refinement:** configure at most 64 cameras and the existing 256 rules globally; reject an oversized snapshot atomically. Reconciliation notifications are coalesced in a capacity-one channel. This bounds worker/status resources without changing matching, transition or cooldown semantics.
 
 **Test maintenance gate:** add/update/remove lifecycle, renewal, reconciliation and failure-isolation tests with each behaviour change, including simulator fault/recovery scenarios; satisfy the shared passing gate before completion.
 

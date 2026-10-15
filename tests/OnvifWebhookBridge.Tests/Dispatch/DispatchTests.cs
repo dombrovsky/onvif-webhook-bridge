@@ -214,11 +214,11 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             var logs = new CaptureLogger();
             var services = new ServiceCollection();
             services.AddLogging(b => b.AddProvider(logs));
-            services.AddSingleCameraPipeline();
+            services.AddCameraPipeline();
             services.AddHttpClient(HttpActionDispatcher.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
                 new Handler((_, _) => throw new HttpRequestException(FakeSecret)));
             using var provider = services.BuildServiceProvider();
-            var pipeline = provider.GetRequiredService<SingleCameraPipeline>();
+            var pipeline = provider.GetRequiredService<CameraPipeline>();
             pipeline.Configure(Camera, [Rule(action: new("http://synthetic.invalid/" + FakeSecret, "POST", [new("Authorization", FakeSecret)], "\"" + FakeSecret + "\""))]);
             Assert.True(pipeline.ManualTest("rule"));
             var queue = provider.GetRequiredService<DispatchQueue>();
@@ -353,7 +353,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         {
             public EventHistory History { get; } = new();
             public DispatchQueue Queue { get; } = new();
-            public SingleCameraPipeline Pipeline { get; }
+            public CameraPipeline Pipeline { get; }
             public TimeProvider Clock { get; }
             public Harness(TimeProvider? clock = null) { Clock = clock ?? TimeProvider.System; Pipeline = new(new(History, Clock), Queue, Clock); }
             public void Configure(params ActionRule[] rules) => Pipeline.Configure(Camera, rules);

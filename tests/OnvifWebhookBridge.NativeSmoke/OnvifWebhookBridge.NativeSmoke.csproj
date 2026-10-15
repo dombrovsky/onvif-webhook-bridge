@@ -8,5 +8,6 @@
     <ProjectReference Include="../../src/OnvifWebhookBridge/OnvifWebhookBridge.csproj" />
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/SimulatorPath.cs" Link="SimulatorPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Onvif/ForwardingPath.cs" Link="ForwardingPath.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Onvif/LifecyclePath.cs" Link="LifecyclePath.cs" />
   </ItemGroup>
 </Project>

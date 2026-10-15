@@ -4,7 +4,7 @@ namespace OnvifWebhookBridge.Dispatch
     using System.Net.Sockets;
     using System.Text;
 
-    public sealed class HttpActionDispatcher(DispatchQueue queue, SingleCameraPipeline configuration,
+    public sealed class HttpActionDispatcher(DispatchQueue queue, CameraPipeline configuration,
         IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null) : BackgroundService
     {
         public const string ClientName = "actions";

@@ -154,7 +154,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
     internal sealed record ScenarioConfig(string BindAddress, string ControlApiAddress, bool DiscoveryEnabled);
     internal sealed record ScenarioCamera(string Id, string DisplayName, string Persona, ScenarioUser[] Users, ScenarioNetwork Network);
     internal sealed record ScenarioUser(string Username, string Password, string Level);
-    internal sealed record ScenarioNetwork(string BindAddress, int HttpPort, string AdvertisedHost, int AdvertisedHttpPort);
+    internal sealed record ScenarioNetwork(string BindAddress, int HttpPort, string AdvertisedHost, int AdvertisedHttpPort, int RtspPort = 8554);
     internal sealed record Trigger(string Topic, bool State, int Duration);
     [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
     [JsonSerializable(typeof(Scenario))]

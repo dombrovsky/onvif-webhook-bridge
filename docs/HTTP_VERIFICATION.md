@@ -1,5 +1,7 @@
 # Phase 3 HTTP verification and handoff
 
+Historical phase 3 record. Phase 4 renames SingleCameraPipeline/AddSingleCameraPipeline to CameraPipeline/AddCameraPipeline and replaces SingleCameraWorker with supervised per-camera workers. Current use, evidence and hardware gates are in [the lifecycle handoff](LIFECYCLE_VERIFICATION.md).
+
 Date: 2026-10-15. Generic single-camera HTTP forwarding is complete. Verification used only onvifsim, synthetic credentials and an ephemeral local HTTP recorder. No physical device, real destination or live transition action was used. A 2xx result means HTTP transport acceptance; destination-side effects are unverified. Real-device activation/reset mapping checks remain **pending**.
 
 ## Delivered scope and use

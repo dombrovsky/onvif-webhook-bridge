@@ -6,19 +6,21 @@ namespace OnvifWebhookBridge.Dispatch
 
     public static class PipelineServices
     {
-        public static IServiceCollection AddSingleCameraPipeline(this IServiceCollection services)
+
+
+        public static IServiceCollection AddCameraPipeline(this IServiceCollection services)
         {
             services.AddSingleton(TimeProvider.System);
             services.AddSingleton<EventHistory>();
             services.AddSingleton<EventNormalizer>();
             services.AddSingleton<RuleState>();
             services.AddSingleton<DispatchQueue>();
-            services.AddSingleton<SingleCameraPipeline>();
+            services.AddSingleton<CameraPipeline>();
             services.AddHttpClient(HttpActionDispatcher.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateHandler)
                 .RemoveAllLoggers();
             services.AddHostedService<HttpActionDispatcher>();
-            services.AddHostedService<SingleCameraWorker>();
+            services.AddHostedService<CameraSupervisor>();
             return services;
         }
     }

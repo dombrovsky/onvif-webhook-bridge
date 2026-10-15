@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility, generic phase 2 components and phase 3 single-camera in-memory HTTP pipeline complete. Multiple-camera supervision, persistence and administration remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md, docs/ONVIF_OBSERVATIONS.md, docs/PHASE2_VERIFICATION.md and docs/HTTP_VERIFICATION.md.
+Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility, generic phase 2 components and phase 3 single-camera in-memory HTTP pipeline complete. Phase 4 adds multiple-camera supervision and runtime reconciliation; persistence and administration remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md, docs/ONVIF_OBSERVATIONS.md, docs/PHASE2_VERIFICATION.md, docs/HTTP_VERIFICATION.md and docs/LIFECYCLE_VERIFICATION.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. Phase 2 adds generic event normalization, bounded history and in-memory rule admission. Phase 3 connects one camera to bounded HTTP delivery and an in-process manual test service. The full bridge, UI, persistence, multiple-camera supervision and production Docker deployment remain future deliverables.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. Phase 2 adds generic event normalization, bounded history and in-memory rule admission. Phase 3 connects one camera to bounded HTTP delivery and an in-process manual test service. Phase 4 adds independent camera workers and in-memory reconciliation. The full bridge, UI, persistence and production Docker deployment remain future deliverables.
 
 ## Functional requirements
 
@@ -16,6 +16,7 @@ The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN
 
 - Add, edit, enable, disable, and remove cameras. Store stable ID, name, device-service URL, username, and password; allow unauthenticated cameras.
 - Test ONVIF connectivity with a bounded device/service request. Display the result separately from event-subscription readiness: reachable does not prove events work.
+- Phase 4 resource bound: at most 64 cameras and 256 rules globally; reject oversized configuration snapshots before changing active state.
 - Run one independent PullPoint subscription and sequential polling loop per enabled camera. Subscribe without topic or content filters; no WS-Discovery or callback listener is required.
 - Discover event-service addresses from the configured device endpoint; respect subscription endpoint references, including reference parameters when supplied. Do not invent subscription URLs.
 - Renew before expiration using returned timing information, and recreate subscriptions after expiration, reboot, transport failure, or invalid-subscription fault. Coordinate pull duration with remaining lease and HTTP timeout. Retry connection with capped exponential backoff and jitter, never a tight loop.

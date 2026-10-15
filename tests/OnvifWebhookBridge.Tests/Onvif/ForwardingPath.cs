@@ -42,9 +42,9 @@ namespace OnvifWebhookBridge.Tests.Onvif
             var logs = new SafeLogCapture();
             var services = new ServiceCollection();
             services.AddLogging(b => b.AddProvider(logs));
-            services.AddSingleCameraPipeline();
+            services.AddCameraPipeline();
             await using var provider = services.BuildServiceProvider();
-            var pipeline = provider.GetRequiredService<SingleCameraPipeline>();
+            var pipeline = provider.GetRequiredService<CameraPipeline>();
             var history = provider.GetRequiredService<EventHistory>();
             var queue = provider.GetRequiredService<DispatchQueue>();
             ForwardingRule Match(string id) => new(id, "camera", topic,
@@ -60,13 +60,13 @@ namespace OnvifWebhookBridge.Tests.Onvif
             actions = actions.Concat(Enumerable.Range(0, 4).Select(i => new ActionRule(Match("fill" + i) with { Enabled = false }, new(origin + "/fill")))).ToArray();
             pipeline.Configure(new("camera", "Synthetic camera", endpoint.AbsoluteUri, "synthetic-user", "synthetic-password"), actions);
             var hosted = provider.GetServices<IHostedService>().ToArray();
-            var worker = hosted.OfType<SingleCameraWorker>().Single();
+            var worker = hosted.OfType<CameraSupervisor>().Single();
             var dispatcher = hosted.OfType<HttpActionDispatcher>().Single();
             using var control = new HttpClient { BaseAddress = controlAddress };
             try
             {
                 await worker.StartAsync(token);
-                await Until(() => worker.State == "Subscribed", token);
+                await Until(() => worker.Status.Single().State == "Subscribed", token);
                 // Hold execution to deterministically exercise real-event overflow without blocking polling.
                 for (var rule = 0; rule < 4; rule++)
                 { for (var i = 0; i < 25; i++) { Check(pipeline.ManualTest("fill" + rule), "FillQueue"); } }
@@ -91,7 +91,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 Check(!captures.Any(c => c.Path == "/redirect-target"), "RedirectNotFollowed");
                 await Trigger(true);
                 await Until(() => captures.Count >= 108, token);
-                Check(worker.State == "Subscribed", "FailureIsolation");
+                Check(worker.Status.Single().State == "Subscribed", "FailureIsolation");
                 Check(!logs.Text.ToString().Contains(secret, StringComparison.Ordinal) &&
                     !logs.Text.ToString().Contains(origin, StringComparison.Ordinal), "LogRedaction");
                 Check(!string.Join(" ", pipeline.Status).Contains(secret, StringComparison.Ordinal), "StatusRedaction");
