@@ -11,6 +11,7 @@
     <Project Path="src/OnvifProbe/OnvifProbe.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OnvifWebhookBridge.NativeSmoke/OnvifWebhookBridge.NativeSmoke.csproj" />
     <Project Path="tests/OnvifWebhookBridge.Tests/OnvifWebhookBridge.Tests.csproj" />
   </Folder>
 </Solution>

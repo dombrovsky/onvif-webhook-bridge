@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated after prototype verification and the separately authorized project scaffold. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. The solution, build conventions, health-only application shell, Dockerfile and focused simulator test now exist. Phases 2–8 remain future product work; the scaffold does not complete their acceptance criteria. Each phase remains independently reviewable.
+Planning baseline: 2026-10-14; updated 2026-10-15 after phase 2. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phase 2 delivers in-memory normalization/history/matching/admission with synthetic, onvifsim and Linux x64 NativeAOT evidence; real activation/reset mapping checks remain pending. The health-only shell is unchanged. Phases 3–8 remain future product work. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -92,7 +92,7 @@ Apply this gate to every implementation step within every phase, including chang
 
 **Test maintenance gate:** add/update/remove normalization, history, matching and admission tests with each behaviour change; the shared passing gate and phase-specific verification below are required before completion.
 
-**Status: next focused coding session.** Goal: turn observed notifications into testable, vendor-independent rule decisions. HTTP actions remain phase 3 so matching can be verified without triggering external services.
+**Status: generic implementation complete; real-device mapping checks pending.** Evidence, commands, limits and phase 3 handoff are recorded in [docs/PHASE2_VERIFICATION.md](docs/PHASE2_VERIFICATION.md). Goal: turn observed notifications into testable, vendor-independent rule decisions. HTTP actions remain phase 3 so matching can be verified without triggering external services.
 
 **Dependencies:** completed phase 1 probe, 0.11.2 notification contract and WS-Addressing fix, REQUIREMENTS R2/R3. Synthetic fixtures may drive development; a real mapping requires privately observed activation/reset evidence. No dependence on an assumed boolean field name.
 

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/OnvifWebhookBridge/OnvifWebhookBridge.csproj" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Onvif/SimulatorPath.cs" Link="SimulatorPath.cs" />
+  </ItemGroup>
+</Project>
