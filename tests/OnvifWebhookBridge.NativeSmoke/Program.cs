@@ -11,7 +11,8 @@ try
     using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
     SimulatorPath.VerifySyntheticContent();
     await SimulatorPath.Verify(new Uri(args[0]), new Uri(args[1]), deadline.Token);
-    Console.WriteLine("PASS: simulator discovery, subscription, renewal, normalization, history, matching, admission and unsubscribe.");
+    await ForwardingPath.Verify(new Uri(args[0]), new Uri(args[1]), deadline.Token);
+    Console.WriteLine("PASS: simulator subscription/renewal, matching/history and single-camera HTTP forwarding, overflow, isolation, manual test and redaction.");
     return 0;
 }
 catch (Exception)

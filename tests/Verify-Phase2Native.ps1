@@ -9,8 +9,9 @@ $files = @('Directory.Build.props', 'Directory.Build.targets',
     'src/OnvifWebhookBridge/OnvifWebhookBridge.csproj', 'src/OnvifWebhookBridge/Program.cs',
     'tests/OnvifWebhookBridge.NativeSmoke/OnvifWebhookBridge.NativeSmoke.csproj',
     'tests/OnvifWebhookBridge.NativeSmoke/Program.cs',
-    'tests/OnvifWebhookBridge.Tests/Onvif/SimulatorPath.cs')
-foreach ($folder in @('Events', 'Rules', 'Onvif')) {
+    'tests/OnvifWebhookBridge.Tests/Onvif/SimulatorPath.cs',
+    'tests/OnvifWebhookBridge.Tests/Onvif/ForwardingPath.cs')
+foreach ($folder in @('Events', 'Rules', 'Onvif', 'Dispatch')) {
     $files += Get-ChildItem -LiteralPath (Join-Path $repository "src/OnvifWebhookBridge/$folder") -Filter '*.cs' |
         ForEach-Object { "src/OnvifWebhookBridge/$folder/$($_.Name)" }
 }

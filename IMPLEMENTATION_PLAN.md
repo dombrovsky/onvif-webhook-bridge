@@ -1,6 +1,6 @@
 # Implementation plan
 
-Planning baseline: 2026-10-14; updated 2026-10-15 after phase 2. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phase 2 delivers in-memory normalization/history/matching/admission with synthetic, onvifsim and Linux x64 NativeAOT evidence; real activation/reset mapping checks remain pending. The health-only shell is unchanged. Phases 3–8 remain future product work. Each phase remains independently reviewable.
+Planning baseline: 2026-10-14; updated 2026-10-15 after phase 3. Phase 1 is complete under the revised diagnostic/library-feasibility scope below. Phases 2–3 deliver generic in-memory matching and single-camera HTTP forwarding with synthetic, onvifsim/local-recorder and Linux x64 NativeAOT evidence; real activation/reset mapping checks remain pending. The host exposes only health and starts without camera/action configuration. Phases 4–8 remain future product work. Each phase remains independently reviewable.
 
 ## Dependency research
 
@@ -115,11 +115,15 @@ Apply this gate to every implementation step within every phase, including chang
 
 ## Phase 3 — Single-camera generic HTTP forwarding
 
+**Status: generic implementation complete; real-device activation/reset mappings and destination-side effects remain unverified.** See [docs/HTTP_VERIFICATION.md](docs/HTTP_VERIFICATION.md) for scope, component use, limits, automated evidence and handoff. No live transition actions or real destinations were contacted.
+
 **Test maintenance gate:** add/update/remove dispatch, queue, retry and redaction tests with each behaviour change, and maintain the onvifsim-to-local-recorder integration path; satisfy the shared passing gate before completion.
 
 **Dependencies:** phases 1–2.
 
 **Exact scope:** connect the proven one-camera pipeline to HttpClientFactory dispatch with an in-memory rule configuration, bounded queue/concurrency, manual test service and execution status. No UI or SQLite yet; private test configuration stays ignored.
+
+Phase 3 admission decision (2026-10-15): apply a 25-pending-job per-rule quota within the existing global 100-job bound. A burst from one rule must not consume all queue capacity before round-robin execution can provide fairness. This refines R4 without changing matching/cooldown semantics; both limits reject the newest job.
 
 **Expected files:** `Dispatch/{HttpActionDispatcher,DispatchQueue,ExecutionStatus}.cs`, minimal `Program.cs`/DI wiring and single-camera hosted worker using the proven adapter, `tests/.../Dispatch/`, `docs/HTTP_VERIFICATION.md`.
 

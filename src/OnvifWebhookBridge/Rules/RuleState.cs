@@ -49,6 +49,8 @@ namespace OnvifWebhookBridge.Rules
             }
         }
 
+        internal void ResetRule(string ruleId) { lock (gate) { ClearRule(ruleId); } }
+
         // The callback must be bounded, synchronous and non-reentrant. True means accepted
         // into a future queue (or a test recorder). Throwing is a rejection, isolated per rule.
         public IReadOnlyList<RuleDecision> Process(NormalizedEvent notification,

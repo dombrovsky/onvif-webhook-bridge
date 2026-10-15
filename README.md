@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge
 
-Project scaffold for a .NET 10 NativeAOT bridge, with a working standalone ONVIF diagnostic probe and phase 2 in-memory event normalization, bounded history and deterministic rule admission. The application currently exposes only `/health`; camera workers, forwarding, persistence and administration are future work. The phase 2 components are exercised by tests and are not wired to public event routes.
+Incremental .NET 10 NativeAOT bridge, with a standalone ONVIF diagnostic probe, phase 2 normalization/history/matching and phase 3 single-camera HTTP forwarding. The application exposes only `/health` and starts with no camera or rules configured. In-process callers can supply private in-memory configuration before hosted services start; there are no event, configuration or manual-test HTTP routes. Multiple-camera supervision, persistence and administration remain future work. See [HTTP verification and component use](docs/HTTP_VERIFICATION.md).
 
 ## Structure and build
 
@@ -33,7 +33,7 @@ dotnet test OnvifWebhookBridge.slnx --no-build
 
 The script builds [onvifsim's upstream Dockerfile](https://github.com/mrtian2016/onvifsim/blob/8f86706c2ba768006e85b38f6bc1c760d36f1bba/packaging/docker/Dockerfile) at the pinned commit. Testcontainers starts a disposable simulator, uses random host ports, loads a generic synthetic camera scenario with fake credentials and mapped advertised addresses, subscribes, renews, triggers true/false notifications through its control API, pulls both states and unsubscribes. No physical camera or destination is contacted. Containers are disposed automatically; the image remains cached. Add `--no-cache --pull` to the script's Docker build command when intentionally refreshing the upstream base/OS packages, then rerun the tests.
 
-Run `./tests/Verify-Phase2Native.ps1` for the Linux x64 NativeAOT check of the same simulator path plus synthetic preservation/bounds checks. It builds a test-only image from an explicit source allowlist staged under ignored `.local/`, runs against a disposable onvifsim container and removes the containers. It requires Linux amd64 Docker; it does not establish arm64 or physical-device interoperability. See [phase 2 evidence and component contracts](docs/PHASE2_VERIFICATION.md), including truncation and transition-identity limits. Real activation/reset cycles remain pending before using a real transition mapping.
+Run `./tests/Verify-Phase2Native.ps1` for the Linux x64 NativeAOT checks of both phases 2 and 3: simulator protocol, preservation/matching and the actual single-camera worker to a local GET/POST recorder, including overflow, failure isolation, manual testing, redirects and redaction. The historical script name is retained. It builds a test-only image from an explicit source allowlist staged under ignored `.local/`, runs against a disposable onvifsim container and removes the containers. It requires Linux amd64 Docker; it does not establish arm64 or physical-device interoperability. See [phase 2 evidence and component contracts](docs/PHASE2_VERIFICATION.md), including truncation and transition-identity limits. Real activation/reset cycles remain pending before using a real transition mapping.
 
 Build the application image from the repository root:
 

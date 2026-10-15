@@ -6,7 +6,7 @@ namespace OnvifWebhookBridge.Rules
     public sealed record FieldCondition(FieldSection Section, string Name, string ExpectedValue,
         ComparisonMode Comparison = ComparisonMode.Text);
 
-    // Phase 2 describes decisions only. HTTP action configuration belongs to phase 3.
+    // Matching configuration stays independent of the HTTP action snapshot.
     public sealed record ForwardingRule(string Id, string CameraId, string Topic,
         FieldCondition? Condition = null, bool Enabled = false,
         OccurrenceMode Mode = OccurrenceMode.Occurrence, TimeSpan Cooldown = default);

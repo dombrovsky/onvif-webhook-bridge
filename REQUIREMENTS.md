@@ -1,6 +1,6 @@
 # ONVIF Webhook Bridge requirements
 
-Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility and generic phase 2 components complete; production wiring and remaining bridge requirements below remain to be implemented. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md, docs/ONVIF_OBSERVATIONS.md and docs/PHASE2_VERIFICATION.md.
+Planning baseline: 2026-10-14. Updated status: diagnostic/library-feasibility, generic phase 2 components and phase 3 single-camera in-memory HTTP pipeline complete. Multiple-camera supervision, persistence and administration remain later work. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md, docs/ONVIF_OBSERVATIONS.md, docs/PHASE2_VERIFICATION.md and docs/HTTP_VERIFICATION.md.
 
 ## Purpose and scope
 
@@ -8,7 +8,7 @@ Build a small, self-hosted, vendor-independent bridge from ONVIF events to confi
 
 Users configure their own ONVIF device endpoints and HTTP destinations. Event topics and fields must be discovered from notifications, with no vendor-specific integration in the core. Repository documentation and fixtures must remain generic and contain no personal deployment details.
 
-The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. Phase 2 adds generic event normalization, bounded history and in-memory rule admission. The full bridge, UI, persistence, HTTP dispatcher and production Docker deployment remain future deliverables.
+The original planning-only session produced REQUIREMENTS.md, IMPLEMENTATION_PLAN.md and AGENTS.md. Subsequent authorization produced a console diagnostic prototype, its README and focused smoke test, followed by a solution/build scaffold, health-only application shell, Dockerfile and simulator-backed test. Phase 2 adds generic event normalization, bounded history and in-memory rule admission. Phase 3 connects one camera to bounded HTTP delivery and an in-process manual test service. The full bridge, UI, persistence, multiple-camera supervision and production Docker deployment remain future deliverables.
 
 ## Functional requirements
 
@@ -51,6 +51,7 @@ Proposed baseline semantics (explicit assumptions pending confirmation):
 
 - Use IHttpClientFactory for outbound actions. Configure headers per request; never share authorization between destinations. Validate HTTP/HTTPS URLs, method, headers, JSON body, and size limits. Reject embedded URL credentials, control characters, and attempts to override transport-controlled headers.
 - Proposed defaults: 10-second timeout per attempt, 100 pending jobs globally, 4 active jobs globally, at most one active job per rule. Apply fair scheduling so a failing destination cannot monopolize dispatch. Queue overflow rejects the new job and records a safe status/counter; it does not stall subscription polling or remove inspector history.
+- Phase 3 admission refinement (2026-10-15): cap pending jobs at 25 per rule within the global 100. Burst/overflow review showed that a single rule otherwise fills the entire queue before fair execution can help another rule. Reject new work at either bound; do not evict or replay accepted work. Round-robin execution remains FIFO within each rule.
 - At most 3 total attempts, with short jittered delay and an overall 30-second job deadline. Retry transient transport failures, timeout, 408, 429, and 5xx; do not retry ordinary 4xx. Respect Retry-After only within that deadline. Dispose responses without reading unbounded bodies. Do not automatically follow redirects, which could disclose configured headers.
 - Retries can duplicate effects, including GET endpoints that trigger actions. Proposed per-rule retry limit defaults to zero additional attempts; administrators can opt into up to two. No exactly-once promise, durable outbox, or replay after restart. Display this choice in rule configuration.
 - Log delivery success/failure using IDs, safe error categories, duration, attempt count, and status only. Never log destination URLs, tokens, headers, request bodies, SOAP authentication, or unsanitized exception strings.
