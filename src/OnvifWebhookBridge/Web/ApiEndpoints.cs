@@ -211,7 +211,7 @@ namespace OnvifWebhookBridge.Web
         }
         private static CameraEdit Camera(CameraView v) => new(v.Id, v.Name, v.Endpoint, v.Enabled);
         private static RuleEdit Rule(RuleView v) => new(v.Match, v.Name, v.Method, v.AdditionalAttempts,
-            ignoreCertificateValidation: v.IgnoreCertificateValidation);
+            ignoreCertificateValidation: v.IgnoreCertificateValidation, urlSensitive: v.UrlSensitive);
         private static CookieOptions Cookie(bool secure, DateTimeOffset? expires) => new()
         {
             HttpOnly = true,

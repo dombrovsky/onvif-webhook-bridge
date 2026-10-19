@@ -110,6 +110,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             restored.Initialize();
             Check(restored.Read().Revision == 3 && restored.Read().HasAdministrator, "BackupRestore");
             VerifyMigration();
+            VerifyUrlSensitivity();
             VerifyTlsMigration();
             VerifyMigrationRollback();
             VerifyCorruption();
@@ -120,6 +121,36 @@ namespace OnvifWebhookBridge.Tests.Persistence
             using var versionConnection = temp.Open();
             Check(versionConnection.ServerVersion.Length > 0, "NativeLoading");
             Console.WriteLine("PASS: SQLite " + versionConnection.ServerVersion + "; storage transactions, migrations, masking, backup/restore and platform permissions.");
+        }
+
+        private static void VerifyUrlSensitivity()
+        {
+            using var temp = new TemporaryStorage();
+            var store = new ConfigurationStore(temp.Path, Pipeline());
+            store.Initialize();
+            store.Save(0, [Camera(false)], [Rule()]);
+            var original = store.Read().Rules.Single();
+            Check(original.UrlSensitive && original.PublicUrl is null, "LegacyCallerRemainsWriteOnly");
+            RuleEdit Edit(bool? sensitive, SecretEdit<string>? url = null) => new(original.Match, original.Name,
+                original.Method, original.AdditionalAttempts, url, urlSensitive: sensitive);
+            Throws<ArgumentException>(() => store.Save(1, [Camera(false)], [Edit(false)]));
+            Check(store.Read().Revision == 1 && store.Read().Rules.Single().PublicUrl is null, "CannotRevealStoredSecret");
+            const string address = "https://destination.example/public-synthetic";
+            store.Save(1, [Camera(false)], [Edit(false, Replace(address))]);
+            Check(store.Read().Rules.Single() is { UrlSensitive: false, PublicUrl: address }, "ExplicitPublicReplacement");
+            store.Save(2, [Camera(false)], [Edit(null)]);
+            var restarted = new ConfigurationStore(temp.Path, Pipeline());
+            restarted.Initialize();
+            Check(restarted.Read().Rules.Single() is { UrlSensitive: false, PublicUrl: address }, "PublicClassificationPreservedAndRestored");
+            restarted.Save(3, [Camera(false)], [Edit(true)]);
+            Check(restarted.Read().Rules.Single() is { UrlSensitive: true, PublicUrl: null }, "PublicCanBecomeSecretWithoutReplacement");
+            using (var connection = temp.Open())
+            {
+                Throws<SqliteException>(() => Execute(connection, "UPDATE Rules SET UrlSensitive=2"));
+                Execute(connection, "ALTER TABLE Rules DROP COLUMN UrlSensitive; PRAGMA user_version=3");
+            }
+            restarted.Initialize();
+            Check(restarted.Read().Rules.Single() is { UrlSensitive: true, PublicUrl: null }, "Schema3MigratesToSensitive");
         }
 
         private static void VerifyTlsMigration()
@@ -143,7 +174,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             store.Initialize();
             Check(!store.Read().Rules.Single().IgnoreCertificateValidation, "ExistingRulesKeepStrictTls");
             using var verify = temp.Open();
-            Check(Scalar(verify, "PRAGMA user_version") == "3", "TlsMigrationVersion");
+            Check(Scalar(verify, "PRAGMA user_version") == "4", "TlsMigrationVersion");
             Throws<SqliteException>(() => Execute(verify, "UPDATE Rules SET IgnoreCertificateValidation=2"));
         }
 
@@ -163,7 +194,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             store.Initialize();
             Check(store.Read().Cameras.Single().Id == "earlier" && store.Read().Rules.Count == 0, "MigrationPreserves");
             using var verify = temp.Open();
-            Check(Scalar(verify, "PRAGMA user_version") == "3", "MigrationVersion");
+            Check(Scalar(verify, "PRAGMA user_version") == "4", "MigrationVersion");
             Execute(verify, "PRAGMA user_version=99");
             Throws<StorageException>(() => store.Initialize());
             Check(Scalar(verify, "PRAGMA user_version") == "99", "FutureSchemaUntouched");
