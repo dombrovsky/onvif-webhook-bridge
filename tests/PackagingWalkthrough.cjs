@@ -10,7 +10,7 @@ const assert=require('node:assert/strict');
     await page.getByLabel('Password',{exact:true}).fill('synthetic-admin-password');
     await page.getByRole('button',{name:'Sign in',exact:true}).click();
     await page.getByRole('button',{name:'Add camera',exact:true}).waitFor();
-    await page.getByRole('button',{name:'Events',exact:true}).click();
+    await page.getByRole('button',{name:'Event Explorer',exact:true}).click();
     await page.getByText('Synthetic/Deployment',{exact:true}).first().waitFor();
     await page.getByRole('button',{name:'Inspect notification / create rule',exact:true}).first().click();
     assert((await page.locator('#details').innerText()).includes('rawMessageXml'));

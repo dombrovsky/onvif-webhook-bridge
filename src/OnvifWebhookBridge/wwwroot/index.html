@@ -2,15 +2,15 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ONVIF Webhook Bridge</title><link rel="stylesheet" href="/app.css"><script defer src="/app.js"></script></head>
 <body>
-<header><h1>ONVIF Webhook Bridge</h1><p>Discover notifications. Review rules. Forward HTTP actions.</p></header>
+<header class="brand"><span aria-hidden="true">⌁</span><div><h1>ONVIF Bridge</h1><p>Event operations</p></div></header>
 <main>
 <p id="feedback" role="status" aria-live="polite"></p>
 <form id="login" action="/api/login" method="post" autocomplete="on"><h2>Administrator sign in</h2><label for="admin-username">Username<input id="admin-username" name="username" type="text" required maxlength="256" autocomplete="username" autocapitalize="none" spellcheck="false"></label><label for="admin-password">Password<input id="admin-password" name="password" type="password" required maxlength="4096" autocomplete="current-password"></label><button type="submit">Sign in</button></form>
 <section id="workspace" hidden>
-<nav aria-label="Screens"><button type="button" data-screen="Cameras">Cameras</button><button type="button" data-screen="Events">Events</button><button type="button" data-screen="Rules">Rules</button><button type="button" id="logout">Log out</button></nav>
+<nav aria-label="Screens"><button type="button" data-screen="Overview">Overview</button><button type="button" data-screen="Cameras">Cameras</button><button type="button" data-screen="Events">Event Explorer</button><button type="button" data-screen="Rules">Rules</button><button type="button" id="logout">Log out</button></nav>
 <p id="connection" role="status"></p><div id="screen"></div>
 </section>
-<dialog id="editor"><form id="edit-form" method="post"><h2 id="edit-title"></h2><p id="edit-help"></p><div id="fields"></div><p id="edit-error" role="alert"></p><button id="save" type="submit">Save</button><button type="button" id="cancel">Cancel</button></form></dialog>
-<dialog id="inspection"><h2>Notification details</h2><p>Exact matching topic and all retained properties. XML is displayed as text. Truncation flags indicate incomplete content.</p><pre id="details"></pre><div id="draft-fields"></div><button type="button" id="close-inspection">Close</button></dialog>
+<dialog id="editor" aria-labelledby="edit-title" aria-describedby="edit-help"><form id="edit-form" method="post"><h2 id="edit-title"></h2><p id="edit-help"></p><div class="editor-layout"><div id="fields"></div><aside id="event-reference" aria-label="Observed event reference" hidden></aside></div><p id="edit-error" role="alert"></p><div class="editor-actions"><button id="save" type="submit">Save</button><button type="button" id="cancel">Cancel</button></div></form></dialog>
+<dialog id="inspection" aria-labelledby="inspection-title"><h2 id="inspection-title">Notification details</h2><p>Exact matching topic and all retained properties. XML is displayed as text. Truncation flags indicate incomplete content.</p><div id="draft-fields" class="actions"></div><button type="button" id="close-inspection">Close</button><pre id="details"></pre></dialog>
 </main><footer>HTTP success means transport acceptance. Real device activation/reset mappings require separate verification.</footer>
 </body></html>
