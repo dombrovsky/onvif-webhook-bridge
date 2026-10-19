@@ -277,18 +277,20 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             Assert.Equal(ExecutionResult.Cancelled, h.Pipeline.Status.Single().Result);
         }
 
-        [Fact]
-        public async Task RemovedFactoryLoggersDoNotLeakSeededSecrets()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task RemovedFactoryLoggersDoNotLeakSeededSecrets(bool ignoreCertificateValidation)
         {
             var logs = new CaptureLogger();
             var services = new ServiceCollection();
             services.AddLogging(b => b.AddProvider(logs));
             services.AddCameraPipeline();
-            services.AddHttpClient(HttpActionDispatcher.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
+            services.AddHttpClient(ignoreCertificateValidation ? HttpActionDispatcher.UnverifiedClientName : HttpActionDispatcher.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
                 new Handler((_, _) => throw new HttpRequestException(FakeSecret)));
             using var provider = services.BuildServiceProvider();
             var pipeline = provider.GetRequiredService<CameraPipeline>();
-            pipeline.Configure(Camera, [Rule(action: new("http://synthetic.invalid/" + FakeSecret, "POST", [new("Authorization", FakeSecret)], "\"" + FakeSecret + "\""))]);
+            pipeline.Configure(Camera, [Rule(action: new("http://synthetic.invalid/" + FakeSecret, "POST", [new("Authorization", FakeSecret)], "\"" + FakeSecret + "\"", ignoreCertificateValidation: ignoreCertificateValidation))]);
             Assert.True(pipeline.ManualTest("rule"));
             var queue = provider.GetRequiredService<DispatchQueue>();
             using var dispatcher = new HttpActionDispatcher(queue, pipeline, provider.GetRequiredService<IHttpClientFactory>(), TimeProvider.System);
@@ -471,6 +473,173 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             await dispatcher.StopAsync(stop.Token);
             Assert.Equal(0, active);
             Assert.All(h.Pipeline.Status, s => Assert.Equal(ExecutionResult.Cancelled, s.Result));
+        }
+
+        [Theory]
+        [InlineData("{\"message\":\"synthetic-secret-DO-NOT-LOG\"}", "application/json", "Json")]
+        [InlineData("{\"error\":true}", "application/problem+json", "Json")]
+        [InlineData("not json", "application/json", "InvalidJson")]
+        [InlineData("", "application/json", "Empty")]
+        [InlineData("<html>synthetic</html>", "text/html", "NotJson")]
+        public async Task ResponseDiagnosticsRetainOnlyValidJsonWithoutChangingHttpOutcome(string body, string contentType, string expected)
+        {
+            var h = new Harness();
+            h.Configure(Rule());
+            await h.Deliver(new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(body, Encoding.UTF8, contentType)
+            })));
+            var status = h.Pipeline.LastExecutions.Single();
+            Assert.Equal(400, status.StatusCode);
+            Assert.Equal(ExecutionResult.HttpFailure, status.Result);
+            Assert.Equal(1, status.Attempts);
+            Assert.Equal(expected, status.ResponseBodyStatus);
+            Assert.Equal(expected == "Json" ? body : null, status.ResponseJson);
+        }
+
+        [Fact]
+        public async Task OversizedAndDeepJsonAreNotRetained()
+        {
+            foreach (var body in new[] { "\"" + new string('x', HttpActionDispatcher.MaximumResponseBytes) + "\"", new string('[', 33) + "0" + new string(']', 33) })
+            {
+                var h = new Harness();
+                h.Configure(Rule());
+                await h.Deliver(new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json")
+                })));
+                var status = h.Pipeline.LastExecutions.Single();
+                Assert.Null(status.ResponseJson);
+                Assert.Contains(status.ResponseBodyStatus, new[] { "TooLarge", "InvalidJson" });
+                Assert.Equal(ExecutionResult.Accepted, status.Result);
+            }
+        }
+
+        [Fact]
+        public async Task LastAttemptClearsEarlierJsonWhenTransportFails()
+        {
+            var h = new Harness();
+            h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 1)));
+            var calls = 0;
+            await h.Deliver(new Factory((_, _) =>
+            {
+                if (++calls > 1)
+                {
+                    throw new HttpRequestException(FakeSecret);
+                }
+                var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("{\"prior\":true}", Encoding.UTF8, "application/json")
+                };
+                response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(response);
+            }));
+            var status = h.Pipeline.LastExecutions.Single();
+            Assert.Null(status.StatusCode);
+            Assert.Null(status.ResponseJson);
+            Assert.Equal(ExecutionResult.TransportFailure, status.Result);
+            Assert.DoesNotContain(FakeSecret, status.TransportError ?? "");
+        }
+
+        [Fact]
+        public async Task UnreadableJsonDoesNotRetryAcceptedAction()
+        {
+            var h = new Harness();
+            h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)));
+            var content = new TrackedContent();
+            content.Headers.ContentType = new("application/json");
+            var factory = new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content }));
+            await h.Deliver(factory);
+            var status = h.Pipeline.LastExecutions.Single();
+            Assert.Equal(ExecutionResult.Accepted, status.Result);
+            Assert.Equal(200, status.StatusCode);
+            Assert.Equal("Unavailable", status.ResponseBodyStatus);
+            Assert.Null(status.ResponseJson);
+            Assert.Equal(1, factory.Calls);
+            Assert.True(content.Disposed);
+        }
+
+        [Fact]
+        public async Task UnknownLengthResponseStopsAtBound()
+        {
+            var h = new Harness();
+            h.Configure(Rule());
+            using var stream = new UnknownLengthStream(new byte[HttpActionDispatcher.MaximumResponseBytes * 4]);
+            var content = new StreamContent(stream);
+            content.Headers.ContentType = new("application/json");
+            await h.Deliver(new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content })));
+            Assert.Equal("TooLarge", h.Pipeline.LastExecutions.Single().ResponseBodyStatus);
+            Assert.Equal(HttpActionDispatcher.MaximumResponseBytes + 1, stream.BytesRead);
+        }
+
+        [Fact]
+        public async Task SlowJsonResponseHonorsAttemptTimeoutWithoutRetryingAcceptedAction()
+        {
+            var clock = new TestClock();
+            var h = new Harness(clock);
+            h.Configure(Rule(action: new("http://synthetic.invalid", additionalAttempts: 2)));
+            using var stream = new BlockingReadStream();
+            var content = new StreamContent(stream);
+            content.Headers.ContentType = new("application/json");
+            var factory = new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content }));
+            var delivery = h.Deliver(factory);
+            await stream.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(HttpActionDispatcher.AttemptTimeout);
+            await delivery.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(ExecutionResult.Accepted, h.Pipeline.LastExecutions.Single().Result);
+            Assert.Equal("Unavailable", h.Pipeline.LastExecutions.Single().ResponseBodyStatus);
+            Assert.Equal(1, factory.Calls);
+        }
+
+        private sealed class BlockingReadStream : MemoryStream
+        {
+            public override bool CanSeek => false;
+            public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                Entered.SetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return 0;
+            }
+        }
+
+        [Fact]
+        public async Task JsonResponseNeverAppearsInLogs()
+        {
+            var logs = new CaptureLogger();
+            var services = new ServiceCollection();
+            services.AddLogging(b => b.AddProvider(logs));
+            services.AddCameraPipeline();
+            services.AddHttpClient(HttpActionDispatcher.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
+                new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("\"" + FakeSecret + "\"", Encoding.UTF8, "application/json")
+                })));
+            using var provider = services.BuildServiceProvider();
+            var pipeline = provider.GetRequiredService<CameraPipeline>();
+            pipeline.Configure(Camera, [Rule()]);
+            Assert.True(pipeline.ManualTest("rule"));
+            var queue = provider.GetRequiredService<DispatchQueue>();
+            using var dispatcher = new HttpActionDispatcher(queue, pipeline, provider.GetRequiredService<IHttpClientFactory>(), TimeProvider.System,
+                provider.GetRequiredService<ILogger<HttpActionDispatcher>>());
+            await dispatcher.Deliver(await queue.TakeAsync(default), default);
+            Assert.Contains(FakeSecret, pipeline.LastExecutions.Single().ResponseJson!);
+            Assert.DoesNotContain(FakeSecret, logs.Text.ToString());
+        }
+
+        private sealed class UnknownLengthStream(byte[] bytes) : MemoryStream(bytes)
+        {
+            public override bool CanSeek => false;
+            public int BytesRead
+            {
+                get; private set;
+            }
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                var count = await base.ReadAsync(buffer, cancellationToken);
+                BytesRead += count;
+                return count;
+            }
         }
 
         private sealed class Harness

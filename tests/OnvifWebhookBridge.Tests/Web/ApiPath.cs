@@ -39,7 +39,9 @@ namespace OnvifWebhookBridge.Tests.Web
             {
                 using var reader = new StreamReader(c.Request.Body);
                 captures.Enqueue(c.Request.Headers["X-Synthetic"].ToString() + await reader.ReadToEndAsync(token));
-                c.Response.StatusCode = 204;
+                c.Response.StatusCode = 200;
+                c.Response.ContentType = "application/json";
+                await c.Response.WriteAsync("{\"syntheticResponse\":true}", token);
             });
             await recorder.StartAsync(token);
             using var data = new TemporaryStorage();
@@ -69,7 +71,7 @@ namespace OnvifWebhookBridge.Tests.Web
                         new(FieldSection.Data, "State", "true", ComparisonMode.Boolean), true, Method: "POST",
                         Url: new(SecretOperation.Replace, Origin(recorder) + "/synthetic"),
                         Headers: new(SecretOperation.Replace, [new("X-Synthetic", "synthetic-api-token")]),
-                        JsonBody: new(SecretOperation.Replace, "{\"synthetic\":true}")));
+                        JsonBody: new(SecretOperation.Replace, "{\"synthetic\":true}"), IgnoreCertificateValidation: true));
                     // State is the actual simulator's fallback field, not a core assumption.
                 }
                 await Until(async () => (await Get("/api/camera-status")).Contains("Subscribed", StringComparison.Ordinal));
@@ -84,13 +86,15 @@ namespace OnvifWebhookBridge.Tests.Web
                 await Until(() => Task.FromResult(captures.Count == count + 1));
                 Check(captures.Last() == "synthetic-api-token{\"synthetic\":true}", "ApiEventToRecorder");
                 var masked = await Get("/api/configuration");
+                Check(masked.Contains("\"ignoreCertificateValidation\":true", StringComparison.Ordinal), "ApiTlsChoiceRestartAndEdits");
                 Check(!masked.Contains("synthetic-api-token", StringComparison.Ordinal) && !masked.Contains("synthetic-password", StringComparison.Ordinal) && !masked.Contains(Origin(recorder), StringComparison.Ordinal), "ApiMaskedSecrets");
                 using (var manual = await Send(client, "POST", "/api/rules/api-rule/test", cookie: session.Cookie, csrf: session.Csrf, origin: origin))
                 {
                     Check(manual.StatusCode == HttpStatusCode.Accepted, "ExplicitManualTest");
                 }
                 await Until(() => Task.FromResult(captures.Count == count + 2));
-                await Until(async () => (await Get("/api/executions")).Contains("204", StringComparison.Ordinal));
+                await Until(async () => (await Get("/api/executions")).Contains("syntheticResponse", StringComparison.Ordinal));
+                Check((await Get("/api/executions")).Contains("\"statusCode\":200", StringComparison.Ordinal), "ExecutionResponseStatus");
                 if (pass == 0)
                 {
                     await Ok("POST", "/api/cameras/api-camera/enabled", new EnabledRequest(revision++, false));
@@ -111,6 +115,7 @@ namespace OnvifWebhookBridge.Tests.Web
                         Check(referenced.StatusCode == HttpStatusCode.Conflict, "ReferencedCamera");
                     }
                     await Ok("POST", "/api/rules/api-rule/enabled", new EnabledRequest(revision++, false));
+                    Check((await Get("/api/configuration")).Contains("\"ignoreCertificateValidation\":true", StringComparison.Ordinal), "EnabledChangeKeepsTlsChoice");
                     await Ok("DELETE", "/api/rules/api-rule", new RevisionRequest(revision++));
                     await Ok("DELETE", "/api/cameras/api-camera", new RevisionRequest(revision++));
                     await Until(async () => await Get("/api/camera-status") == "[]");

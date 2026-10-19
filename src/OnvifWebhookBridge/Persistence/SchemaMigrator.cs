@@ -4,7 +4,7 @@ namespace OnvifWebhookBridge.Persistence
 
     internal static class SchemaMigrator
     {
-        internal const int CurrentVersion = 2;
+        internal const int CurrentVersion = 3;
         internal static void Migrate(SqliteConnection connection)
         {
             using var transaction = connection.BeginTransaction(deferred: false);

@@ -30,13 +30,19 @@ namespace OnvifWebhookBridge.Dispatch
             get;
         }
 
+        public bool IgnoreCertificateValidation
+        {
+            get;
+        }
+
         public bool Equals(HttpAction? other) => other is not null && Address == other.Address && Method == other.Method &&
-            JsonBody == other.JsonBody && AdditionalAttempts == other.AdditionalAttempts && Headers.SequenceEqual(other.Headers);
+            JsonBody == other.JsonBody && AdditionalAttempts == other.AdditionalAttempts &&
+            IgnoreCertificateValidation == other.IgnoreCertificateValidation && Headers.SequenceEqual(other.Headers);
         public override bool Equals(object? obj) => obj is HttpAction other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(Address, Method, JsonBody, AdditionalAttempts);
+        public override int GetHashCode() => HashCode.Combine(Address, Method, JsonBody, AdditionalAttempts, IgnoreCertificateValidation);
 
         public HttpAction(string url, string method = "GET", IEnumerable<ActionHeader>? headers = null,
-            string? jsonBody = null, int additionalAttempts = 0)
+            string? jsonBody = null, int additionalAttempts = 0, bool ignoreCertificateValidation = false)
         {
             if (url.Length > 8192 || url.Any(char.IsControl) || !Uri.TryCreate(url, UriKind.Absolute, out var address) ||
                 address.Scheme is not ("http" or "https") || address.UserInfo.Length != 0 || address.Fragment.Length != 0 ||
@@ -89,6 +95,7 @@ namespace OnvifWebhookBridge.Dispatch
             Headers = Array.AsReadOnly(copy);
             JsonBody = jsonBody;
             AdditionalAttempts = additionalAttempts;
+            IgnoreCertificateValidation = ignoreCertificateValidation;
         }
 
         internal static bool ForbiddenHost(string host) => host.Equals("metadata.google.internal", StringComparison.OrdinalIgnoreCase) ||

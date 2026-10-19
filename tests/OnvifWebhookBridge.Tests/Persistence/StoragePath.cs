@@ -16,7 +16,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
         internal static RuleEdit Rule() => new(new("rule'", "camera'", "Synthetic/Detection",
             new(FieldSection.Source, "Synthetic", "true", ComparisonMode.Boolean), true, OccurrenceMode.Transition, TimeSpan.FromSeconds(5)),
             "Synthetic rule", "POST", 2, Replace("https://destination.example/action?synthetic=secret"),
-            Replace(new[] { new ActionHeader("X-Synthetic", "synthetic-token") }), Replace("{\"synthetic\":\"secret\"}"));
+            Replace(new[] { new ActionHeader("X-Synthetic", "synthetic-token") }), Replace("{\"synthetic\":\"secret\"}"), ignoreCertificateValidation: true);
 
         public static void Verify()
         {
@@ -32,7 +32,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             var view = store.Read();
             Check(view.Rules.Single().Match == new ForwardingRule("rule'", "camera'", "Synthetic/Detection",
                 new(FieldSection.Source, "Synthetic", "true", ComparisonMode.Boolean), true, OccurrenceMode.Transition, TimeSpan.FromSeconds(5)) &&
-                view.Rules.Single() is { Method: "POST", AdditionalAttempts: 2 }, "FullRuleRoundTrip");
+                view.Rules.Single() is { Method: "POST", AdditionalAttempts: 2, IgnoreCertificateValidation: true }, "FullRuleRoundTrip");
             Check(view.HasAdministrator && view.Cameras.Single() is { HasPassword: true, HasUsername: true } &&
                 view.Rules.Single() is { HasUrl: true, HasHeaders: true, HasJsonBody: true, Name: "Synthetic rule" }, "MaskedPresence");
             Check(!string.Join(" ", view.Rules).Contains("synthetic-token", StringComparison.Ordinal) &&
@@ -49,8 +49,9 @@ namespace OnvifWebhookBridge.Tests.Persistence
             Check(restarted.Cameras.Single() == original && restarted.Status.Count == 0 && history.Snapshot().Count == 0,
                 "RestoredConfigurationTransientRuntime");
             Check(queue.Stop().Count == 0, "QueueNeverRestored");
+            Check(restartStore.Read().Rules.Single().IgnoreCertificateValidation, "TlsChoiceRestored");
             var match = view.Rules.Single().Match;
-            store.Save(1, [new("camera'", "Synthetic camera", original.Endpoint)], [new(match, "Synthetic rule", "POST", 2)]);
+            store.Save(1, [new("camera'", "Synthetic camera", original.Endpoint)], [new(match, "Synthetic rule", "POST", 2, ignoreCertificateValidation: true)]);
             Check(ReferenceEquals(pipeline.Cameras.Single(), original), "UnchangedCameraSnapshot");
             Check(pipeline.Eligible(job), "EquivalentSavePreservesQueuedEligibility");
             using (var connection = temp.Open())
@@ -109,6 +110,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             restored.Initialize();
             Check(restored.Read().Revision == 3 && restored.Read().HasAdministrator, "BackupRestore");
             VerifyMigration();
+            VerifyTlsMigration();
             VerifyMigrationRollback();
             VerifyCorruption();
             if (OperatingSystem.IsLinux())
@@ -118,6 +120,31 @@ namespace OnvifWebhookBridge.Tests.Persistence
             using var versionConnection = temp.Open();
             Check(versionConnection.ServerVersion.Length > 0, "NativeLoading");
             Console.WriteLine("PASS: SQLite " + versionConnection.ServerVersion + "; storage transactions, migrations, masking, backup/restore and platform permissions.");
+        }
+
+        private static void VerifyTlsMigration()
+        {
+            using var temp = new TemporaryStorage();
+            Directory.CreateDirectory(temp.Path);
+            using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temp.Database, Pooling = false }.ToString()))
+            {
+                connection.Open();
+                foreach (var number in new[] { "001", "002" })
+                {
+                    using var stream = typeof(ConfigurationStore).Assembly.GetManifestResourceStream("OnvifWebhookBridge.Persistence.Migrations." + number + ".sql")!;
+                    using var reader = new StreamReader(stream);
+                    Execute(connection, reader.ReadToEnd());
+                }
+                Execute(connection, "INSERT INTO Cameras VALUES('earlier','Synthetic earlier','https://camera.example/device',NULL,NULL,0)");
+                Execute(connection, "INSERT INTO Rules VALUES('earlier-rule','earlier','Synthetic earlier rule','Synthetic/Tls',NULL,NULL,NULL,NULL,0,0,0,'https://destination.example/synthetic','GET',NULL,0)");
+                Execute(connection, "PRAGMA user_version=2");
+            }
+            var store = new ConfigurationStore(temp.Path, Pipeline());
+            store.Initialize();
+            Check(!store.Read().Rules.Single().IgnoreCertificateValidation, "ExistingRulesKeepStrictTls");
+            using var verify = temp.Open();
+            Check(Scalar(verify, "PRAGMA user_version") == "3", "TlsMigrationVersion");
+            Throws<SqliteException>(() => Execute(verify, "UPDATE Rules SET IgnoreCertificateValidation=2"));
         }
 
         private static void VerifyMigration()
@@ -136,7 +163,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             store.Initialize();
             Check(store.Read().Cameras.Single().Id == "earlier" && store.Read().Rules.Count == 0, "MigrationPreserves");
             using var verify = temp.Open();
-            Check(Scalar(verify, "PRAGMA user_version") == "2", "MigrationVersion");
+            Check(Scalar(verify, "PRAGMA user_version") == "3", "MigrationVersion");
             Execute(verify, "PRAGMA user_version=99");
             Throws<StorageException>(() => store.Initialize());
             Check(Scalar(verify, "PRAGMA user_version") == "99", "FutureSchemaUntouched");

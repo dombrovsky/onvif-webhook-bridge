@@ -23,6 +23,7 @@ if (args is ["--storage-only"])
         await ExecutablePath.Verify(CancellationToken.None);
         await SecurityPath.Verify(CancellationToken.None);
         await HealthPath.Verify(CancellationToken.None);
+        await WebhookTlsPath.Verify(CancellationToken.None);
         return 0;
     }
     catch (Exception error) { Console.Error.WriteLine("FAIL: native storage verification (" + error.GetType().Name + ")."); return 1; }
@@ -45,6 +46,7 @@ try
     await ExecutablePath.Verify(deadline.Token);
     await SecurityPath.Verify(deadline.Token);
     await HealthPath.Verify(deadline.Token);
+    await WebhookTlsPath.Verify(deadline.Token);
     SimulatorPath.VerifySyntheticContent();
     await SimulatorPath.Verify(new Uri(args[0]), new Uri(args[1]), deadline.Token);
     await ForwardingPath.Verify(new Uri(args[0]), new Uri(args[1]), deadline.Token);

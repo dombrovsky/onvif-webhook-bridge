@@ -20,47 +20,194 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     const errors=[]; page.on('pageerror',e=>errors.push(e.message)); page.on('dialog',d=>d.accept());
     let polls=0; page.on('request',r=>{if(r.url().includes('/api/events')) polls++;});
     await page.goto(base);
-    async function login() { await page.getByLabel('Username',{exact:true}).fill('synthetic-admin'); await page.getByLabel('Password',{exact:true}).fill('synthetic-admin-password'); await page.getByRole('button',{name:'Sign in',exact:true}).click(); await page.getByRole('button',{name:'Add camera',exact:true}).waitFor(); }
+    async function login() {
+      const username=page.getByLabel('Username',{exact:true}), password=page.getByLabel('Password',{exact:true});
+      assert.equal(await username.getAttribute('autocomplete'),'username');
+      assert.equal(await password.getAttribute('autocomplete'),'current-password');
+      assert.equal(await username.getAttribute('id'),'admin-username'); assert.equal(await password.getAttribute('id'),'admin-password');
+      assert.equal(await page.locator('#login').getAttribute('method'),'post');
+      const navigation=page.waitForEvent('framenavigated',{predicate:frame=>frame===page.mainFrame()});
+      await username.fill('synthetic-admin'); await password.fill('synthetic-admin-password');
+      await page.getByRole('button',{name:'Sign in',exact:true}).click(); await navigation;
+      await page.getByRole('button',{name:'Add camera',exact:true}).waitFor();
+      assert.equal(await page.locator('#admin-password').inputValue(),'');
+      assert.equal(new URL(page.url()).search,'');
+    }
     async function api(path, method='GET', body) { return page.evaluate(async ({path,method,body})=>{ const session=await (await fetch('/api/session')).json(); const r=await fetch(path,{method,headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrfToken},body:body===undefined?undefined:JSON.stringify(body)}); return {status:r.status,text:await r.text()}; },{path,method,body}); }
     async function config() { const r=await api('/api/configuration'); assert.equal(r.status,200); return JSON.parse(r.text); }
     async function save() { await page.getByRole('button',{name:'Save',exact:true}).click(); await page.locator('#editor').waitFor({state:'hidden'}); }
-    async function operation(label,op,value) { const group=page.getByRole('group',{name:new RegExp('^'+label+' ·')}); await group.locator('select').selectOption(String(op)); if(op===1) await group.getByLabel('Replacement value').fill(value); }
+    async function verifyFieldHelp() {
+      const rows = page.locator('#fields .field-row:visible');
+      for (const row of await rows.all()) {
+        const control = row.locator('input, select, textarea');
+        const icon = row.getByRole('button',{name:/^Help for /}); const tip = row.getByRole('tooltip',{includeHidden:true});
+        assert(await control.getAttribute('aria-describedby'));
+        assert((await tip.textContent()).length > 40);
+        await icon.hover(); await tip.waitFor({state:'visible'});
+        const bounds = await tip.boundingBox(), viewport = page.viewportSize();
+        assert(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height);
+        await icon.focus(); await page.mouse.move(0,0); await tip.waitFor({state:'visible'});
+        await icon.press('Escape'); await tip.waitFor({state:'hidden'});
+        assert(await page.locator('#editor').isVisible());
+        await control.focus();
+      }
+      const firstIcon = rows.first().getByRole('button',{name:/^Help for /});
+      await firstIcon.focus();
+      await page.screenshot({path:'.local/field-help.png',fullPage:true});
+      await firstIcon.press('Escape');
+    }
+    async function operation(label,op,value) { const group=page.getByRole('group',{name:new RegExp('^'+label+' ·')}); await group.locator('select').selectOption(String(op)); if(op===1) await group.getByLabel('Replacement value',{exact:true}).fill(value); }
     async function screen(name) { await page.getByRole('button',{name,exact:true}).click(); }
     async function trigger(value, selectedTopic=topic) { const r=await fetch(control+'/api/cameras/synthetic-camera/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:selectedTopic,state:value,duration:0})}); assert(r.ok); }
+    // A rejected sign-in stays on the form; only authenticated success navigates.
+    let rejectedNavigations=0;
+    const rejectedNavigation=frame=>{if(frame===page.mainFrame()) rejectedNavigations++;};
+    page.on('framenavigated',rejectedNavigation);
+    await page.getByLabel('Username',{exact:true}).fill('synthetic-admin');
+    await page.getByLabel('Password',{exact:true}).fill('synthetic-incorrect-password');
+    await page.getByRole('button',{name:'Sign in',exact:true}).click();
+    await page.getByRole('status').filter({hasText:'Sign in failed or is temporarily limited.'}).waitFor();
+    assert.equal(rejectedNavigations,0); assert(await page.locator('#login').isVisible());
+    page.off('framenavigated',rejectedNavigation);
     await login();
     await page.getByRole('button',{name:'Add camera',exact:true}).click();
-    await page.getByLabel('Name',{exact:true}).fill(cameraName); await page.getByLabel('Device-service URL').fill(endpoint); await page.getByLabel('Enabled',{exact:true}).check();
-    await operation('Camera username',1,'synthetic-user'); await operation('Camera password',1,'synthetic-password'); await save();
+    const cameraUsername=page.locator('#camera-username'), cameraPassword=page.locator('#camera-password');
+    assert.equal(await page.locator('#edit-form').getAttribute('method'),'post');
+    assert.equal(await cameraUsername.isDisabled(),true); assert.equal(await cameraPassword.isDisabled(),true);
+    assert.equal(await cameraUsername.getAttribute('name'),'camera-username'); assert.equal(await cameraUsername.getAttribute('type'),'text');
+    assert.equal(await cameraPassword.getAttribute('name'),'camera-password'); assert.equal(await cameraPassword.getAttribute('type'),'password');
+    const cameraAutocomplete=await cameraUsername.getAttribute('autocomplete');
+    assert.match(cameraAutocomplete,/^section-camera-\S+ username$/);
+    assert.equal(await cameraPassword.getAttribute('autocomplete'),cameraAutocomplete.replace(/ username$/,' current-password'));
+    await verifyFieldHelp();
+    await page.getByLabel('Name',{exact:true}).fill(cameraName); await page.getByLabel('Device-service URL',{exact:true}).fill(endpoint); await page.getByLabel('Enabled',{exact:true}).check();
+    await operation('Camera username',1,'synthetic-user'); await operation('Camera password',1,'synthetic-password'); await verifyFieldHelp(); await save();
     await page.getByText(/Subscribed · last contact/).waitFor();
     assert.equal(await page.locator('#screen svg').count(),0); assert.equal(await page.evaluate(()=>window.injected),undefined);
+    // A poll must also leave the text node in place while the pointer is held to start a selection.
+    const cameraHeading = await page.locator('#screen h3').elementHandle();
+    const headingBounds = await cameraHeading.boundingBox();
+    await page.mouse.move(headingBounds.x+5,headingBounds.y+headingBounds.height/2);
+    await page.mouse.down();
+    const dragPolls=polls;
+    await waitFor(()=>polls>=dragPolls+2,'polling during pointer selection');
+    assert(await cameraHeading.evaluate(heading=>heading.isConnected));
+    await page.mouse.up();
+    await page.evaluate(()=>getSelection().removeAllRanges());
     await page.getByRole('button',{name:'Test connectivity',exact:true}).click(); await page.getByRole('status').filter({hasText:'Reachable: true'}).waitFor();
     // Preserve credentials on an ordinary edit; stale revision cannot silently overwrite.
     await page.getByRole('button',{name:'Edit camera',exact:true}).click();
+    assert.equal(await page.locator('#camera-username').inputValue(),''); assert.equal(await page.locator('#camera-password').inputValue(),'');
+    assert.equal(await page.locator('#camera-username').isDisabled(),true); assert.equal(await page.locator('#camera-password').isDisabled(),true);
     const initial=await config(); const c=initial.cameras[0];
+    assert.equal(await page.locator('#camera-username').getAttribute('autocomplete'),`section-camera-${encodeURIComponent(c.id)} username`);
+    assert.equal(await page.locator('#camera-password').getAttribute('autocomplete'),`section-camera-${encodeURIComponent(c.id)} current-password`);
     assert(c.hasUsername && c.hasPassword);
     assert.equal((await api(`/api/cameras/${c.id}/enabled`,'POST',{revision:initial.revision,enabled:true})).status,200);
     await page.getByRole('button',{name:'Save',exact:true}).click(); await page.getByRole('alert').filter({hasText:'Configuration changed'}).waitFor();
     await page.getByRole('button',{name:'Cancel',exact:true}).click(); await page.getByRole('button',{name:'Refresh now',exact:true}).click();
     await page.getByRole('button',{name:'Edit camera',exact:true}).click(); await save();
+    // A selected, stale screen must not silently edit newer configuration with its newer revision.
+    const displayedConfig=await config();
+    await page.locator('#screen h3').evaluate(heading=>{
+      const range=document.createRange(); range.selectNodeContents(heading);
+      const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    });
+    assert.equal((await api(`/api/cameras/${c.id}/enabled`,'POST',{revision:displayedConfig.revision,enabled:true})).status,200);
+    const staleScreenPolls=polls;
+    await waitFor(()=>polls>=staleScreenPolls+2,'new configuration fetched while display is selected');
+    await page.getByRole('button',{name:'Edit camera',exact:true}).click();
+    await page.getByRole('button',{name:'Save',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'Configuration changed'}).waitFor();
+    await page.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.getByRole('button',{name:'Refresh now',exact:true}).click();
     await trigger(false); await trigger(true); await trigger(false,'Synthetic/Unmatched');
     await screen('Events'); await page.getByText(topic,{exact:true}).first().waitFor();
     await waitFor(async()=>{const r=await api('/api/events');return r.text.includes('false')&&r.text.includes('true')&&r.text.includes('Synthetic/Unmatched');},'both states and unmatched');
     const event=page.locator('article').filter({has:page.getByText(topic,{exact:true})}).first(); await event.getByRole('button').click();
     assert((await page.locator('#details').innerText()).includes('rawMessageXml')); assert.equal(await page.locator('#details img').count(),0);
     await page.getByRole('button',{name:/Draft from data: State =/}).click();
-    assert.equal(await page.getByLabel('Exact matching topic').inputValue(),topic);
-    assert.equal(await page.getByLabel('Field condition').inputValue(),'1'); assert.equal(await page.getByLabel('Field name',{exact:true}).inputValue(),'State');
+    await verifyFieldHelp();
+    assert.equal(await page.getByLabel('Exact matching topic',{exact:true}).inputValue(),topic);
+    assert.equal(await page.getByLabel('Field condition',{exact:true}).inputValue(),'1'); assert.equal(await page.getByLabel('Field name',{exact:true}).inputValue(),'State');
     assert.equal(await page.getByLabel('Enabled',{exact:true}).isEnabled(),false);
-    await page.getByLabel('Rule name').fill('Synthetic draft'); const recorder=(await api('/fixture/recorder')).text;
-    await operation('Action URL',1,recorder); await page.getByLabel('HTTP method').selectOption('POST');
-    await operation('HTTP headers',1,'[{"name":"X-Synthetic","value":"synthetic-browser-token"}]'); await operation('JSON body',1,'{"synthetic":true}'); await save();
-    let cfg=await config(); assert.equal(cfg.rules[0].match.enabled,false); assert(cfg.rules[0].hasHeaders && cfg.rules[0].hasJsonBody);
-    await screen('Rules'); await page.getByRole('button',{name:'Send manual HTTP test…',exact:true}).click(); await page.getByText(/Last completed: Accepted.*HTTP 204/).waitFor();
-    await page.getByRole('button',{name:'Edit rule',exact:true}).click(); await operation('HTTP headers',2); await operation('JSON body',2); await save(); cfg=await config(); assert(!cfg.rules[0].hasHeaders&&!cfg.rules[0].hasJsonBody&&cfg.rules[0].hasUrl);
+    assert.equal(await page.getByLabel('Ignore certificate validation',{exact:true}).isChecked(),false);
+    await page.getByLabel('Ignore certificate validation',{exact:true}).check();
+    await page.getByLabel('Rule name',{exact:true}).fill('Synthetic draft'); const recorder=(await api('/fixture/recorder')).text;
+    await operation('Action URL',1,recorder); await page.getByLabel('HTTP method',{exact:true}).selectOption('POST');
+    const actionUrlGroup=page.getByRole('group',{name:/^Action URL ·/});
+    const actionUrlInput=actionUrlGroup.getByLabel('Replacement value',{exact:true});
+    assert.equal(await actionUrlInput.getAttribute('type'),'text');
+    assert.equal(await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).getAttribute('aria-pressed'),'false');
+    await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).click();
+    assert.equal(await actionUrlInput.getAttribute('type'),'password'); assert.equal(await actionUrlInput.inputValue(),recorder);
+    assert.equal(await actionUrlGroup.getByRole('button',{name:'Show action URL',exact:true}).getAttribute('aria-pressed'),'true');
+    await actionUrlGroup.getByRole('button',{name:'Show action URL',exact:true}).press('Space');
+    assert.equal(await actionUrlInput.getAttribute('type'),'text'); assert.equal(await actionUrlInput.inputValue(),recorder);
+    await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).click();
+    await operation('Action URL',0);
+    assert.equal(await actionUrlInput.inputValue(),''); assert.equal(await actionUrlInput.isDisabled(),true);
+    await operation('Action URL',1,recorder);
+    assert.equal(await actionUrlInput.getAttribute('type'),'text');
+    const urlBounds=await actionUrlInput.boundingBox(), lockBounds=await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).boundingBox();
+    assert(lockBounds.x>=urlBounds.x+urlBounds.width && Math.abs(lockBounds.y-urlBounds.y)<2);
+    await page.screenshot({path:'.local/action-url-visible.png',fullPage:true});
+    await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).click();
+    await operation('HTTP headers',1,'[{"name":"X-Synthetic","value":"synthetic-browser-token"}]'); await operation('JSON body',1,'{"synthetic":true}'); await verifyFieldHelp(); await save();
+    let cfg=await config(); assert.equal(cfg.rules[0].ignoreCertificateValidation,true); assert.equal(cfg.rules[0].match.enabled,false); assert(cfg.rules[0].hasHeaders && cfg.rules[0].hasJsonBody);
+    await screen('Rules'); await page.getByRole('button',{name:'Send manual HTTP test…',exact:true}).click(); await page.getByText(/Last completed: Accepted.*HTTP 200/).waitFor();
+    await page.getByText('Execution details',{exact:true}).click();
+    await page.getByText('HTTP status: 200',{exact:true}).waitFor();
+    const responsePreview = page.locator('#screen details pre');
+    assert((await responsePreview.innerText()).includes('syntheticResponse'));
+    assert.equal(await responsePreview.locator('img').count(),0);
+    await page.getByRole('button',{name:'Refresh now',exact:true}).click();
+    await responsePreview.waitFor({state:'visible'});
+    assert.equal(await page.evaluate(()=>window.injected),undefined);
+    // Keep selected response text stable while real polling continues; show the latest result when cleared.
+    let selectedRefreshes = 0;
+    let releaseSelectedResponse;
+    const selectionReady = new Promise(resolve=>{releaseSelectedResponse=resolve;});
+    await page.route('**/api/executions',async route=>{
+      await selectionReady;
+      const response=await route.fetch(); const executions=await response.json();
+      for(const execution of executions) execution.responseJson='{"syntheticUpdate":true}';
+      await route.fulfill({json:executions}); selectedRefreshes++;
+    });
+    const selectedResponse = await responsePreview.evaluate(pre=>{
+      const range=document.createRange(); range.selectNodeContents(pre);
+      const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      return selection.toString();
+    });
+    releaseSelectedResponse();
+    const selectionPolls=polls;
+    await waitFor(()=>selectedRefreshes>=2 && polls>=selectionPolls+2,'polling continues during selection');
+    assert(polls>=selectionPolls+2);
+    assert.equal(await page.evaluate(()=>getSelection().toString()),selectedResponse);
+    assert((await responsePreview.innerText()).includes('syntheticResponse'));
+    await page.evaluate(()=>getSelection().removeAllRanges());
+    await responsePreview.filter({hasText:'syntheticUpdate'}).waitFor();
+    await page.unroute('**/api/executions');
+    // Browser rendering seam only: transport failures have no fabricated HTTP response.
+    await page.route('**/api/executions',async route=>{
+      const response=await route.fetch(); const executions=await response.json();
+      for(const execution of executions) Object.assign(execution,{result:4,statusCode:null,responseJson:null,responseBodyStatus:null,transportError:'ConnectionError'});
+      await route.fulfill({json:executions});
+    });
+    await page.getByRole('button',{name:'Refresh now',exact:true}).click();
+    await page.getByText('HTTP status: No HTTP response received',{exact:true}).waitFor();
+    await page.getByText('Transport error category: ConnectionError',{exact:true}).waitFor();
+    assert.equal(await page.locator('#screen details pre').count(),0);
+    await page.unroute('**/api/executions');
+    await page.getByRole('button',{name:'Edit rule',exact:true}).click();
+    assert.equal(await actionUrlInput.inputValue(),''); assert.equal(await actionUrlInput.isDisabled(),true);
+    assert.equal(await actionUrlInput.getAttribute('type'),'text');
+    assert.equal(await actionUrlGroup.getByRole('button',{name:'Mask action URL',exact:true}).isVisible(),false);
+    assert.equal(await page.getByLabel('Ignore certificate validation',{exact:true}).isChecked(),true); await page.getByLabel('Ignore certificate validation',{exact:true}).uncheck(); await operation('HTTP headers',2); await operation('JSON body',2); await save(); cfg=await config(); assert.equal(cfg.rules[0].ignoreCertificateValidation,false); assert(!cfg.rules[0].hasHeaders&&!cfg.rules[0].hasJsonBody&&cfg.rules[0].hasUrl);
     await page.getByRole('button',{name:'Enable rule',exact:true}).click();
     await page.getByRole('button',{name:'Disable rule',exact:true}).waitFor();
     // Second independently matching rule via the actual UI.
-    await page.getByRole('button',{name:'Add rule',exact:true}).click(); await page.getByLabel('Rule name').fill('Synthetic second'); await page.getByLabel('Exact matching topic').fill(topic); await operation('Action URL',1,recorder); await save();
+    await page.getByRole('button',{name:'Add rule',exact:true}).click(); await page.getByLabel('Rule name',{exact:true}).fill('Synthetic second'); await page.getByLabel('Exact matching topic',{exact:true}).fill(topic); await operation('Action URL',1,recorder); await save();
     await page.getByRole('button',{name:'Enable rule',exact:true}).click();
     await waitFor(async()=>await page.getByRole('button',{name:'Disable rule',exact:true}).count()===2,'both rules enabled in refreshed screen');
     await page.screenshot({path:'.local/phase7-rules.png',fullPage:true});
@@ -70,8 +217,12 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Edit camera',exact:true}).click(); await operation('Camera username',2); await operation('Camera password',2); await save();
     cfg=await config(); assert(!cfg.cameras[0].hasUsername&&!cfg.cameras[0].hasPassword);
     await page.getByText(/(Reconnecting|Error).*last contact/).waitFor();
-    await page.getByRole('button',{name:'Edit camera',exact:true}).click(); await operation('Camera username',1,'synthetic-user'); await operation('Camera password',1,'synthetic-password'); await save(); await page.getByText(/Subscribed · last contact/).waitFor();
+    await page.getByRole('button',{name:'Edit camera',exact:true}).click(); await operation('Camera username',1,'synthetic-user'); await operation('Camera password',1,'synthetic-password'); await verifyFieldHelp(); await save(); await page.getByText(/Subscribed · last contact/).waitFor();
     // Session expiry on the server clears editors and cancels polling on the next response.
+    await page.locator('#screen h3').first().evaluate(heading=>{
+      const range=document.createRange(); range.selectNodeContents(heading);
+      const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    });
     assert.equal((await api('/fixture/expire','POST')).status,204); await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
     let stopped=polls; await page.waitForTimeout(3500); assert.equal(polls,stopped);
     await login(); await page.getByRole('button',{name:'Log out',exact:true}).click(); await page.getByRole('button',{name:'Sign in',exact:true}).waitFor(); stopped=polls; await page.waitForTimeout(3500); assert.equal(polls,stopped);

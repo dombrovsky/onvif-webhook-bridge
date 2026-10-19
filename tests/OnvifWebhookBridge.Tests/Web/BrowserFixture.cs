@@ -56,10 +56,11 @@ namespace OnvifWebhookBridge.Tests.Web
             recorderBuilder.Logging.ClearProviders();
             recorderBuilder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, int.Parse(Environment.GetEnvironmentVariable("ONVIF_BROWSER_RECORDER_PORT") ?? "8081")));
             await using var recorder = recorderBuilder.Build();
-            recorder.MapMethods("/synthetic", ["GET", "POST"], (HttpContext c) =>
+            recorder.MapMethods("/synthetic", ["GET", "POST"], async (HttpContext c) =>
             {
                 Interlocked.Increment(ref count);
-                c.Response.StatusCode = 204;
+                c.Response.ContentType = "application/json";
+                await c.Response.WriteAsync("{\"syntheticResponse\":\"<img src=x onerror=window.injected=true>\"}");
             });
             await recorder.StartAsync();
             var builder = WebApplication.CreateSlimBuilder();

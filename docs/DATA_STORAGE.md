@@ -24,7 +24,7 @@ Camera reads include endpoint/name/enabled and credential presence flags, never 
 
 ## Schema and dependencies
 
-Small embedded SQL migrations use `PRAGMA user_version`, advancing only inside a transaction. Version 1 creates configuration revision, cameras and administrator; version 2 adds rules and ordered headers. Earlier supported schemas migrate without discarding data. A future schema version, corrupt database or invalid stored configuration fails closed. `quick_check` runs at startup and foreign-key checks run during loads. Each operation closes its connection (pooling disabled); lock waits are bounded by the two-second SQLite busy timeout. No event history, transition identities, cooldowns, jobs, camera/execution statuses, sessions or response bodies have database tables.
+Small embedded SQL migrations use `PRAGMA user_version`, advancing only inside a transaction. Version 1 creates configuration revision, cameras and administrator; version 2 adds rules and ordered headers; version 3 adds the per-rule certificate-validation exemption, defaulting to false for all existing rules. Earlier supported schemas migrate without discarding data. A future schema version, corrupt database or invalid stored configuration fails closed. `quick_check` runs at startup and foreign-key checks run during loads. Each operation closes its connection (pooling disabled); lock waits are bounded by the two-second SQLite busy timeout. No event history, transition identities, cooldowns, jobs, camera/execution statuses, sessions or response bodies have database tables.
 
 Pinned/resolved dependencies for this phase:
 

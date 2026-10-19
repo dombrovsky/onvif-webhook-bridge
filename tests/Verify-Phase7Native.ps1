@@ -17,6 +17,7 @@ $files = @('Directory.Build.props', 'Directory.Build.targets',
     'tests/OnvifWebhookBridge.Tests/Persistence/StoragePath.cs', 'tests/OnvifWebhookBridge.Tests/Web/SecurityPath.cs', 'tests/OnvifWebhookBridge.Tests/Web/ApiPath.cs', 'tests/OnvifWebhookBridge.Tests/Web/AuthenticationPath.cs', 'tests/OnvifWebhookBridge.Tests/Web/ExecutablePath.cs')
 $files += @('tests/OnvifWebhookBridge.Tests/Web/BrowserPath.cs', 'tests/OnvifWebhookBridge.Tests/Web/BrowserFixture.cs')
 $files += 'tests/OnvifWebhookBridge.Tests/Web/HealthPath.cs'
+$files += 'tests/OnvifWebhookBridge.Tests/Web/WebhookTlsPath.cs'
 $files += Get-ChildItem -LiteralPath (Join-Path $repository 'src/OnvifWebhookBridge/wwwroot') -File | ForEach-Object { "src/OnvifWebhookBridge/wwwroot/$($_.Name)" }
 foreach ($folder in @('Events', 'Rules', 'Onvif', 'Dispatch', 'Persistence', 'Web')) {
     $files += Get-ChildItem -LiteralPath (Join-Path $repository "src/OnvifWebhookBridge/$folder") -Filter '*.cs' |

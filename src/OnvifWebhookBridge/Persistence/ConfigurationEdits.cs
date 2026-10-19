@@ -31,17 +31,18 @@ namespace OnvifWebhookBridge.Persistence
         internal string Id => id;
     }
     public sealed class RuleEdit(ForwardingRule match, string name, string method = "GET", int additionalAttempts = 0,
-        SecretEdit<string>? url = null, SecretEdit<ActionHeader[]>? headers = null, SecretEdit<string>? jsonBody = null)
+        SecretEdit<string>? url = null, SecretEdit<ActionHeader[]>? headers = null, SecretEdit<string>? jsonBody = null,
+        bool ignoreCertificateValidation = false)
     {
         internal string Id => match.Id;
         internal StoredRule Resolve(StoredRule? old) => new(name, new(match, new HttpAction(
             (url ?? new()).Resolve(old?.Rule.Action.Address.AbsoluteUri) ?? "", method,
             (headers ?? new()).Resolve(old?.Rule.Action.Headers.ToArray()),
-            (jsonBody ?? new()).Resolve(old?.Rule.Action.JsonBody), additionalAttempts)));
+            (jsonBody ?? new()).Resolve(old?.Rule.Action.JsonBody), additionalAttempts, ignoreCertificateValidation)));
     }
     public sealed record CameraView(string Id, string Name, string Endpoint, bool Enabled, bool HasUsername, bool HasPassword);
     public sealed record RuleView(ForwardingRule Match, string Name, string Method, int AdditionalAttempts,
-        bool HasUrl, bool HasHeaders, bool HasJsonBody);
+        bool HasUrl, bool HasHeaders, bool HasJsonBody, bool IgnoreCertificateValidation = false);
     public sealed record ConfigurationView(long Revision, IReadOnlyList<CameraView> Cameras, IReadOnlyList<RuleView> Rules,
         bool HasAdministrator);
     internal sealed record StoredRule(string Name, ActionRule Rule);

@@ -3,13 +3,16 @@ namespace OnvifWebhookBridge.Dispatch
     using System.Net;
     using System.Net.Sockets;
     using System.Text;
+    using System.Text.Json;
 
     public sealed class HttpActionDispatcher(DispatchQueue queue, CameraPipeline configuration,
         IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null) : BackgroundService
     {
         public const string ClientName = "actions";
+        public const string UnverifiedClientName = "actions-unverified-tls";
         public static readonly TimeSpan JobDeadline = TimeSpan.FromSeconds(30);
         public static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
+        public const int MaximumResponseBytes = 16384;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -47,6 +50,7 @@ namespace OnvifWebhookBridge.Dispatch
             var started = clock.GetTimestamp();
             var attempts = 0;
             int? code = null;
+            string? responseJson = null, responseBodyStatus = null, transportError = null;
             var result = ExecutionResult.TransportFailure;
             var remaining = JobDeadline - clock.GetElapsedTime(job.EnqueuedAt);
             if (remaining <= TimeSpan.Zero)
@@ -58,7 +62,7 @@ namespace OnvifWebhookBridge.Dispatch
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(stopping, job.Cancellation, deadline.Token);
             try
             {
-                using var client = clients.CreateClient(ClientName);
+                using var client = clients.CreateClient(job.Action.IgnoreCertificateValidation ? UnverifiedClientName : ClientName);
                 for (var attempt = 0; attempt <= job.Action.AdditionalAttempts; attempt++)
                 {
                     linked.Token.ThrowIfCancellationRequested();
@@ -82,6 +86,9 @@ namespace OnvifWebhookBridge.Dispatch
                     var retry = false;
                     TimeSpan? retryAfter = null;
                     code = null;
+                    responseJson = null;
+                    responseBodyStatus = null;
+                    transportError = null;
                     attempts++;
                     try
                     {
@@ -100,15 +107,25 @@ namespace OnvifWebhookBridge.Dispatch
                         {
                             retryAfter = date - clock.GetUtcNow();
                         }
-                        // Response bodies are never read, retained or logged.
+                        (responseJson, responseBodyStatus) = await ReadResponse(response.Content, attemptToken.Token);
                     }
                     catch (OperationCanceledException) when (!linked.IsCancellationRequested)
                     {
                         result = ExecutionResult.Timeout;
                         retry = true;
                     }
-                    catch (HttpRequestException) { result = ExecutionResult.TransportFailure; retry = true; }
-                    catch (IOException) { result = ExecutionResult.TransportFailure; retry = true; }
+                    catch (HttpRequestException error)
+                    {
+                        result = ExecutionResult.TransportFailure;
+                        transportError = error.HttpRequestError.ToString();
+                        retry = true;
+                    }
+                    catch (IOException)
+                    {
+                        result = ExecutionResult.TransportFailure;
+                        transportError = "ConnectionError";
+                        retry = true;
+                    }
                     if (!retry || attempt == job.Action.AdditionalAttempts)
                     {
                         break;
@@ -137,17 +154,71 @@ namespace OnvifWebhookBridge.Dispatch
                 // Fixed category only, including malformed response/header/transport exceptions.
                 result = ExecutionResult.TransportFailure;
             }
-            Record(job, result, attempts, code, started);
+            Record(job, result, attempts, code, started, responseJson, responseBodyStatus, transportError);
         }
-        private void Record(DispatchJob job, ExecutionResult result, int attempts, int? code, long started)
+        private static async Task<(string? Json, string Status)> ReadResponse(HttpContent content, CancellationToken token)
+        {
+            var mediaType = content.Headers.ContentType?.MediaType;
+            if (mediaType is null || !(mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase)))
+            {
+                return (null, "NotJson");
+            }
+            if (content.Headers.ContentLength > MaximumResponseBytes)
+            {
+                return (null, "TooLarge");
+            }
+            try
+            {
+                using var stream = await content.ReadAsStreamAsync(token);
+                var bytes = new byte[MaximumResponseBytes + 1];
+                var length = 0;
+                while (length < bytes.Length)
+                {
+                    var count = await stream.ReadAsync(bytes.AsMemory(length), token);
+                    if (count == 0)
+                    {
+                        break;
+                    }
+                    length += count;
+                }
+                if (length > MaximumResponseBytes)
+                {
+                    return (null, "TooLarge");
+                }
+                if (length == 0)
+                {
+                    return (null, "Empty");
+                }
+                using var json = JsonDocument.Parse(bytes.AsMemory(0, length), new JsonDocumentOptions { MaxDepth = 32 });
+                return (json.RootElement.GetRawText(), "Json");
+            }
+            catch (JsonException)
+            {
+                return (null, "InvalidJson");
+            }
+            catch (Exception)
+            {
+                return (null, "Unavailable");
+            }
+        }
+        private void Record(DispatchJob job, ExecutionResult result, int attempts, int? code, long started,
+            string? responseJson = null, string? responseBodyStatus = null, string? transportError = null)
         {
             var duration = clock.GetElapsedTime(started);
-            configuration.Record(new(job.Id, job.RuleId, clock.GetUtcNow(), result, attempts, code, duration));
+            configuration.Record(new(job.Id, job.RuleId, clock.GetUtcNow(), result, attempts, code, duration, responseJson, responseBodyStatus, transportError));
             if (result != ExecutionResult.Running)
             {
                 logger?.LogInformation("HTTP job {JobId}: {Result}; attempts {Attempts}; status {Status}; duration ms {Duration}",
                     job.Id, result, attempts, code, duration.TotalMilliseconds);
             }
+        }
+
+        internal static SocketsHttpHandler CreateUnverifiedHandler()
+        {
+            var handler = CreateHandler();
+            // Separate named-client pool; never change a shared verified handler.
+            handler.SslOptions.RemoteCertificateValidationCallback = static (_, _, _, _) => true;
+            return handler;
         }
 
         internal static SocketsHttpHandler CreateHandler() => new()

@@ -19,6 +19,9 @@ namespace OnvifWebhookBridge.Dispatch
             services.AddHttpClient(HttpActionDispatcher.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateHandler)
                 .RemoveAllLoggers();
+            services.AddHttpClient(HttpActionDispatcher.UnverifiedClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+                .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateUnverifiedHandler)
+                .RemoveAllLoggers();
             services.AddHostedService<HttpActionDispatcher>();
             services.AddHostedService<CameraSupervisor>();
             return services;

@@ -74,7 +74,7 @@ namespace OnvifWebhookBridge.Persistence
                     Array.AsReadOnly(value.Cameras.Select(c => new CameraView(c.Id, c.Name, c.Endpoint, c.Enabled,
                         c.Username is not null, c.Password is not null)).ToArray()),
                     Array.AsReadOnly(value.Rules.Select(r => new RuleView(r.Rule.Match, r.Name, r.Rule.Action.Method,
-                        r.Rule.Action.AdditionalAttempts, true, r.Rule.Action.Headers.Count != 0, r.Rule.Action.JsonBody is not null)).ToArray()),
+                        r.Rule.Action.AdditionalAttempts, true, r.Rule.Action.Headers.Count != 0, r.Rule.Action.JsonBody is not null, r.Rule.Action.IgnoreCertificateValidation)).ToArray()),
                     value.HasAdministrator);
             }
         });
@@ -107,10 +107,10 @@ namespace OnvifWebhookBridge.Persistence
                 {
                     var r = stored.Rule.Match;
                     var a = stored.Rule.Action;
-                    Execute(connection, transaction, "INSERT INTO Rules VALUES($p0,$p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12,$p13,$p14)",
+                    Execute(connection, transaction, "INSERT INTO Rules VALUES($p0,$p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12,$p13,$p14,$p15)",
                         r.Id, r.CameraId, stored.Name, r.Topic, r.Condition is { } f ? (int)f.Section : null,
                         r.Condition?.Name, r.Condition?.ExpectedValue, r.Condition is { } condition ? (int)condition.Comparison : null,
-                        r.Enabled, (int)r.Mode, r.Cooldown.Ticks, a.Address.AbsoluteUri, a.Method, a.JsonBody, a.AdditionalAttempts);
+                        r.Enabled, (int)r.Mode, r.Cooldown.Ticks, a.Address.AbsoluteUri, a.Method, a.JsonBody, a.AdditionalAttempts, a.IgnoreCertificateValidation);
                     for (var i = 0; i < a.Headers.Count; i++)
                     {
                         Execute(connection, transaction, "INSERT INTO Headers VALUES($p0,$p1,$p2,$p3)", r.Id, i, a.Headers[i].Name, a.Headers[i].Value);
@@ -270,7 +270,7 @@ namespace OnvifWebhookBridge.Persistence
                 }
             }
             var rules = new List<StoredRule>();
-            using (var command = Command(connection, transaction, "SELECT Id,CameraId,Name,Topic,Section,FieldName,ExpectedValue,Comparison,Enabled,Mode,CooldownTicks,Url,Method,JsonBody,AdditionalAttempts FROM Rules LIMIT 257"))
+            using (var command = Command(connection, transaction, "SELECT Id,CameraId,Name,Topic,Section,FieldName,ExpectedValue,Comparison,Enabled,Mode,CooldownTicks,Url,Method,JsonBody,AdditionalAttempts,IgnoreCertificateValidation FROM Rules LIMIT 257"))
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -280,7 +280,7 @@ namespace OnvifWebhookBridge.Persistence
                         reader.GetString(5), reader.GetString(6), (ComparisonMode)reader.GetInt32(7));
                     rules.Add(new(reader.GetString(2), new(new(id, reader.GetString(1), reader.GetString(3), condition,
                         reader.GetBoolean(8), (OccurrenceMode)reader.GetInt32(9), TimeSpan.FromTicks(reader.GetInt64(10))),
-                        new(reader.GetString(11), reader.GetString(12), headers.GetValueOrDefault(id), Text(reader, 13), reader.GetInt32(14)))));
+                        new(reader.GetString(11), reader.GetString(12), headers.GetValueOrDefault(id), Text(reader, 13), reader.GetInt32(14), reader.GetBoolean(15)))));
                 }
             }
             using var admin = Command(connection, transaction, "SELECT COUNT(*) FROM Administrator");

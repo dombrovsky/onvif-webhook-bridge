@@ -5,7 +5,8 @@ namespace OnvifWebhookBridge.Dispatch
         Queued, Running, Accepted, HttpFailure, TransportFailure, Timeout, Cancelled, Stale, Expired, Overflow
     }
     public sealed record ExecutionStatus(Guid JobId, string RuleId, DateTimeOffset Time, ExecutionResult Result,
-        int Attempts = 0, int? StatusCode = null, TimeSpan Duration = default);
+        int Attempts = 0, int? StatusCode = null, TimeSpan Duration = default,
+        string? ResponseJson = null, string? ResponseBodyStatus = null, string? TransportError = null);
 
     public sealed record DispatchJob(Guid Id, string RuleId, long RuleRevision, long CameraRevision,
         HttpAction Action, bool Manual, long EnqueuedAt, CancellationToken Cancellation);

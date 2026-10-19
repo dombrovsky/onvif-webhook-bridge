@@ -13,3 +13,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #101820; color
 dialog { background: #1c2c38; color: #fff; border: 1px solid #8195a7; border-radius: 8px; width: min(700px,85vw); max-height: 85vh; }
 dialog::backdrop { background: #000a; } #login { max-width: 420px; } #feedback, #edit-error { color: #ffcf8c; } footer { margin-top: 32px; color: #b6c7d2; }
 [hidden] { display: none !important; }
+.field-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 10px; margin: 14px 0; }
+.field-row > label { margin: 0; align-self: center; }
+.field-row > input, .field-row > select, .field-row > textarea { grid-column: 1 / -1; }
+.field-row > .maskable-value { grid-column: 1; }
+.mask-toggle { grid-column: 2; grid-row: 2; min-width: 42px; padding: 6px; }
+.mask-toggle:focus-visible { outline: 2px solid #48c6ad; outline-offset: 3px; }
+.field-help { position: relative; align-self: center; }
+.info-icon { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; font-size: .85rem; font-weight: bold; }
+.info-icon:focus-visible { outline: 2px solid #48c6ad; outline-offset: 3px; }
+.field-tooltip { display: none; position: fixed; width: min(340px,65vw); padding: 10px; border: 1px solid #8195a7; border-radius: 5px; background: #101820; color: #e9f0f5; box-shadow: 0 3px 12px #0008; z-index: 1; font-size: .9rem; line-height: 1.45; overflow-wrap: anywhere; }
+.field-help:not(.dismissed):hover .field-tooltip, .field-help:not(.dismissed):focus-within .field-tooltip { display: block; }
