@@ -1,5 +1,7 @@
 # ONVIF Webhook Bridge requirements
 
+Authorized UI redesign (2026-10-19): responsive Overview/Cameras/Event Explorer/Rules, persistent real-event rule reference, accessible field help, simplified secret edits and header rows. Schema 4 adds URL sensitivity: existing rules remain sensitive, browser-created rules explicitly default visible, and revealing a stored sensitive URL requires replacement. Existing isolated per-rule TLS handling is retained. Matching/delivery semantics and deployment scope are unchanged. See docs/UI_REDESIGN_VERIFICATION.md.
+
 Planning baseline: 2026-10-14. Updated status: phases 1–7 generic implementation complete through SQLite persistence and authenticated Minimal API administration. Phase 7 adds plain browser administration; Phase 8 adds production packaging, Compose, per-platform CI and release guidance; hardware/hosted-release gates remain explicit in docs/DEPLOYMENT_VERIFICATION.md. Verification evidence and pending hardware/platform checks are recorded in IMPLEMENTATION_PLAN.md and the phase verification documents, including docs/PERSISTENCE_VERIFICATION.md and docs/ADMIN_VERIFICATION.md.
 
 ## Purpose and scope
@@ -60,7 +62,7 @@ Proposed baseline semantics (explicit assumptions pending confirmation):
 
 ### R5 — UI, persistence, and security
 
-- Three screens: Cameras (CRUD, status, connectivity test), Events (recent notifications/details/create-rule), Rules (CRUD, enable/disable, manual test, last execution result).
+- Four screens: Overview (bounded process snapshots), Cameras (CRUD, status, connectivity test), Event Explorer (recent notifications/search/details/create-rule), Rules (CRUD, enable/disable, manual test, last execution result).
 - Use static HTML/CSS and small plain JavaScript served by the same process; Minimal APIs with source-generated JSON metadata. No Node build, React, MVC/Razor dependency, frontend service, or SignalR requirement.
 - SQLite persists cameras, rules, schema version, and administrator credential hash. Use parameterized SQL and small versioned transactional migrations, preferably Microsoft.Data.Sqlite without an ORM. Runtime history, transition state, queues, and execution status are in memory.
 - Updates persist before workers/rules are reconciled. Deleting a referenced camera is rejected until its rules are removed; disabling preserves them and prevents event dispatch from that camera. Queued jobs for disabled/deleted/edited cameras or rules are invalidated before execution; already-sent HTTP cannot be recalled.

@@ -26,7 +26,7 @@ namespace OnvifWebhookBridge.Web
     public sealed record RuleRequest(long Revision, string Name, string CameraId, string Topic, FieldCondition? Condition = null,
         bool Enabled = false, OccurrenceMode Mode = OccurrenceMode.Occurrence, double CooldownSeconds = 0,
         string Method = "GET", int AdditionalAttempts = 0, StringSecret? Url = null, HeaderSecret? Headers = null, StringSecret? JsonBody = null,
-        bool IgnoreCertificateValidation = false)
+        bool IgnoreCertificateValidation = false, bool? UrlSensitive = null)
     {
         internal RuleEdit Edit(string id)
         {
@@ -35,7 +35,7 @@ namespace OnvifWebhookBridge.Web
                 throw new ArgumentException();
             }
             return new(new(id, CameraId, Topic, Condition, Enabled, Mode, TimeSpan.FromSeconds(CooldownSeconds)), Name,
-                Method, AdditionalAttempts, Url?.Edit(), Headers?.Edit(), JsonBody?.Edit(), IgnoreCertificateValidation);
+                Method, AdditionalAttempts, Url?.Edit(), Headers?.Edit(), JsonBody?.Edit(), IgnoreCertificateValidation, UrlSensitive);
         }
     }
     public sealed record ConnectivityView(bool Reachable, string Result);

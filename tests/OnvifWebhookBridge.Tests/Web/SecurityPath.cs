@@ -179,6 +179,33 @@ namespace OnvifWebhookBridge.Tests.Web
                 using var response = await client.SendAsync(request, token);
                 Check(response.StatusCode == HttpStatusCode.RequestEntityTooLarge, "BoundedRequest");
             }
+            async Task<HttpStatusCode> SetVisibility(long revision, bool? sensitive, StringSecret? url = null)
+            {
+                using var response = await Send(client, "PUT", "/api/rules/synthetic-rule",
+                    new RuleRequest(revision, "Synthetic", "synthetic", "Synthetic/Topic", Url: url, UrlSensitive: sensitive),
+                    session.Cookie, session.Csrf, origin);
+                return response.StatusCode;
+            }
+            Check(await SetVisibility(3, false) == HttpStatusCode.BadRequest, "ApiCannotRevealStoredUrl");
+            Check(await SetVisibility(3, false, new(SecretOperation.Replace, "https://destination.example/public-synthetic")) == HttpStatusCode.OK, "ApiPublicUrlOptIn");
+            foreach (var path in new[] { "/api/configuration", "/api/rules" })
+            {
+                using var response = await Send(client, "GET", path, cookie: session.Cookie);
+                Check((await response.Content.ReadAsStringAsync(token)).Contains("https://destination.example/public-synthetic", StringComparison.Ordinal), "AuthenticatedPublicUrlRead");
+                using var denied = await Send(client, "GET", path);
+                Check(denied.StatusCode == HttpStatusCode.Unauthorized, "PublicUrlStillRequiresAuthentication");
+            }
+            using (var enabled = await Send(client, "POST", "/api/rules/synthetic-rule/enabled", new EnabledRequest(4, false), session.Cookie, session.Csrf, origin))
+            {
+                Check(enabled.IsSuccessStatusCode && !app.Services.GetRequiredService<ConfigurationStore>().Read().Rules.Single().UrlSensitive, "VisibilitySurvivesEnabledEdit");
+            }
+            Check(await SetVisibility(5, true) == HttpStatusCode.OK, "ApiMarkUrlSensitive");
+            using (var response = await Send(client, "GET", "/api/configuration", cookie: session.Cookie))
+            {
+                Check(!(await response.Content.ReadAsStringAsync(token)).Contains("public-synthetic", StringComparison.Ordinal), "ApiSensitiveUrlNotReturned");
+            }
+            Check(await SetVisibility(6, null) == HttpStatusCode.OK && app.Services.GetRequiredService<ConfigurationStore>().Read().Rules.Single().UrlSensitive,
+                "OmittedClassificationPreservesSecret");
             using (var logout = await Send(client, "POST", "/api/logout", cookie: session.Cookie, csrf: session.Csrf, origin: origin))
             {
                 Check(logout.StatusCode == HttpStatusCode.NoContent, "Logout");

@@ -1,5 +1,7 @@
 # Phase 7 browser verification and handoff
 
+The 2026-10-19 redesign supersedes the historical UI descriptions below. See [redesign evidence](UI_REDESIGN_VERIFICATION.md) and [current browser usage](BROWSER_ADMINISTRATION.md) for persistent URL classification, the responsive editor and final verification gates.
+
 ## Action URL visibility follow-up — 2026-10-19
 
 New Action URL replacements now use a visible text input with a right-aligned lock button. The button changes only the input display between text/password, preserves the entered value, exposes an accessible action/state and supports keyboard activation without submitting the form. Preserve still keeps the server-side URL write-only; leaving Replace clears/disables the input and resets visible mode. Fresh editors also start visible. No API, persisted secret classification or storage format changed.
