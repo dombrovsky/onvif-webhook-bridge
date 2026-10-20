@@ -19,6 +19,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
   try {
     page = await browser.newPage(); page.setDefaultTimeout(20000);
     const errors=[]; page.on('pageerror',e=>errors.push(e.message)); page.on('dialog',d=>d.accept());
+    const secretWrites=[]; page.on('request',r=>{if(r.method()==='PUT' && /\/api\/(cameras|rules)\//.test(r.url())) secretWrites.push(r.postData());});
     let polls=0; page.on('request',r=>{if(r.url().includes('/api/events')) polls++;});
     if (process.env.ONVIF_BROWSER_SOURCE_ASSETS === '1') {
       // Development-only asset seam; the default walkthrough verifies embedded native assets.
@@ -73,10 +74,14 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
       await rows.first().getByRole('tooltip').waitFor({state:'visible'});
       await firstIcon.press('Escape');
     }
-    async function operation(label,op,value) { const group=page.getByRole('group',{name:new RegExp('^'+label+' ·')}); await group.getByRole('button',{name:op===0?'Undo':op===1?'Edit':'Clear',exact:true}).click(); if(op===1) {
-      if(label==='HTTP headers') { const headers=JSON.parse(value); for(let i=0;i<headers.length;i++){ if(i) await group.getByRole('button',{name:'Add header',exact:true}).click(); await group.getByLabel('Header name',{exact:true}).nth(i).fill(headers[i].name); await group.getByLabel('Header value',{exact:true}).nth(i).fill(headers[i].value); } }
-      else await group.getByLabel('Replacement value',{exact:true}).fill(value);
-    } }
+    async function operation(label,op,value) {
+      const group=page.getByRole('group',{name:new RegExp('^'+label+' ·')});
+      assert.equal(await group.getByRole('button',{name:/^(Edit|Undo|Clear)$/}).count(),0);
+      if(label==='HTTP headers') {
+        while(await group.getByRole('button',{name:'Remove header',exact:true}).count()) await group.getByRole('button',{name:'Remove header',exact:true}).first().click();
+        if(op===1) for(const header of JSON.parse(value)) { await group.getByRole('button',{name:'Add header',exact:true}).click(); await group.getByLabel('Header name',{exact:true}).last().fill(header.name); await group.getByLabel('Header value',{exact:true}).last().fill(header.value); }
+      } else await group.getByLabel('Replacement value',{exact:true}).fill(op===1?value:'');
+    }
     async function screen(name) { await page.getByRole('button',{name:name==='Events'?'Event Explorer':name,exact:true}).click(); }
     async function verifyActionSpacing() {
       const problems = await page.evaluate(() => {
@@ -123,7 +128,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Add camera',exact:true}).click();
     const cameraUsername=page.locator('#camera-username'), cameraPassword=page.locator('#camera-password');
     assert.equal(await page.locator('#edit-form').getAttribute('method'),'post');
-    assert.equal(await cameraUsername.isDisabled(),true); assert.equal(await cameraPassword.isDisabled(),true);
+    assert.equal(await cameraUsername.isDisabled(),false); assert.equal(await cameraPassword.isDisabled(),false);
     assert.equal(await cameraUsername.getAttribute('name'),'camera-username'); assert.equal(await cameraUsername.getAttribute('type'),'text');
     assert.equal(await cameraPassword.getAttribute('name'),'camera-password'); assert.equal(await cameraPassword.getAttribute('type'),'password');
     const cameraAutocomplete=await cameraUsername.getAttribute('autocomplete');
@@ -147,8 +152,13 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Test connectivity',exact:true}).click(); await page.getByRole('status').filter({hasText:'Reachable: true'}).waitFor();
     // Preserve credentials on an ordinary edit; stale revision cannot silently overwrite.
     await page.getByRole('button',{name:'Edit camera',exact:true}).click();
-    assert.equal(await page.locator('#camera-username').inputValue(),''); assert.equal(await page.locator('#camera-password').inputValue(),'');
-    assert.equal(await page.locator('#camera-username').isDisabled(),true); assert.equal(await page.locator('#camera-password').isDisabled(),true);
+    assert.equal(await page.locator('#camera-username').inputValue(),'••••••••'); assert.equal(await page.locator('#camera-password').inputValue(),'••••••••');
+    assert.equal(await page.locator('#camera-username').isDisabled(),false); assert.equal(await page.locator('#camera-password').isDisabled(),false);
+    await page.locator('#camera-username').focus(); await page.locator('#camera-username').press('ArrowRight'); await page.locator('#camera-username').press('Backspace');
+    assert.equal(await page.locator('#camera-username').inputValue(),'');
+    await page.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.getByRole('button',{name:'Edit camera',exact:true}).click();
+    assert.equal(await page.locator('#camera-username').inputValue(),'••••••••');
     const initial=await config(); const c=initial.cameras[0];
     assert.equal(await page.locator('#camera-username').getAttribute('autocomplete'),`section-camera-${encodeURIComponent(c.id)} username`);
     assert.equal(await page.locator('#camera-password').getAttribute('autocomplete'),`section-camera-${encodeURIComponent(c.id)} current-password`);
@@ -281,14 +291,27 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     assert.equal(await page.locator('#screen details pre').count(),0);
     await page.unroute('**/api/executions');
     await page.getByRole('button',{name:'Edit rule',exact:true}).click();
-    assert.equal(await actionUrlInput.inputValue(),''); assert.equal(await actionUrlInput.isDisabled(),true);
+    assert.equal(await actionUrlInput.inputValue(),'••••••••'); assert.equal(await actionUrlInput.isDisabled(),false);
     assert.equal(await actionUrlInput.getAttribute('type'),'text');
-    assert.equal(await actionUrlGroup.getByRole('button',{name:'Hide entered URL',exact:true}).isVisible(),false);
+    assert.equal(await actionUrlGroup.getByRole('button',{name:'Hide entered URL',exact:true}).isVisible(),true);
+    await actionUrlGroup.screenshot({path:'.local/secrets-field-desktop.png'});
+    await page.setViewportSize({width:390,height:844});
+    await actionUrlGroup.screenshot({path:'.local/secrets-field-mobile.png'});
+    assert(await page.evaluate(()=>document.querySelector('#editor').scrollWidth<=innerWidth));
+    await page.setViewportSize({width:1280,height:900});
     await page.getByRole('button',{name:'Sensitive URL',exact:true}).click();
     await page.getByRole('button',{name:'Save',exact:true}).click();
     await page.getByRole('alert').filter({hasText:'Re-enter the URL'}).waitFor();
     await page.getByRole('button',{name:'Sensitive URL',exact:true}).click();
-    await operation('HTTP headers',2); await operation('HTTP headers',0);
+    const storedHeaders=page.getByRole('group',{name:/^HTTP headers ·/});
+    await storedHeaders.getByLabel('Header name',{exact:true}).focus();
+    await storedHeaders.getByLabel('Header name',{exact:true}).press('Delete');
+    assert.equal(await storedHeaders.getByLabel('Header name',{exact:true}).inputValue(),'');
+    assert.equal(await storedHeaders.getByLabel('Header value',{exact:true}).inputValue(),'');
+    await storedHeaders.getByLabel('Header name',{exact:true}).pressSequentially('X-Replacement');
+    assert.equal(await storedHeaders.getByLabel('Header name',{exact:true}).inputValue(),'X-Replacement');
+    await page.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.getByRole('button',{name:'Edit rule',exact:true}).click();
     assert.equal((await config()).rules[0].hasHeaders,true);
     assert.equal(await page.getByLabel('Ignore certificate validation',{exact:true}).isChecked(),true); await page.getByLabel('Ignore certificate validation',{exact:true}).uncheck(); await operation('HTTP headers',2); await operation('JSON body',2); await save(); cfg=await config(); assert.equal(cfg.rules[0].ignoreCertificateValidation,false); assert(!cfg.rules[0].hasHeaders&&!cfg.rules[0].hasJsonBody&&cfg.rules[0].hasUrl);
     await page.getByRole('button',{name:'Enable rule',exact:true}).click();
@@ -362,6 +385,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Enable camera',exact:true}).click(); await page.getByText(/Subscribed · last contact/).waitFor();
     await page.getByRole('button',{name:'Delete camera',exact:true}).click(); await waitFor(async()=>(await config()).cameras.length===0,'camera deletion');
     assert.equal(await page.evaluate(()=>window.injected),undefined); assert.deepEqual(errors,[]);
+    assert(secretWrites.length>0); assert(secretWrites.every(body=>!body.includes('••••••••')),'mask sentinels never become stored secrets');
     await page.screenshot({path:process.env.ONVIF_BROWSER_SCREENSHOT || '.local/phase7-browser.png',fullPage:true});
     console.log('PASS: browser CRUD, simulator event inspection/drafts, inert HTML/XML, secret preserve/replace/clear, stale revisions, connectivity/disconnection, two rules/local recorder, expiry/logout/polling and restart.');
   } catch(error) { if(page) await page.screenshot({path:'.local/redesign-browser-failure.png',fullPage:true}).catch(()=>{}); throw error; } finally { await browser.close(); }

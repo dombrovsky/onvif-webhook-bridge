@@ -60,10 +60,8 @@ footer { border-top: 1px solid var(--line); margin-top: 30px; padding-top: 14px;
 .header-row { border-top: 1px solid var(--line); padding: 8px 0; }
 .header-row > button { margin-bottom: 8px; }
 .secret-group > .secret-status { margin-bottom: 8px; }
-.secret-group > .actions { margin-top: 8px; }
-.secret-group > .actions + div:not([hidden]) { margin-top: 16px; }
-.secret-group > .actions + div > .field-row:first-child { margin-top: 0; }
-.secret-group > .actions + div > .field-row:last-child { margin-bottom: 0; }
+.secret-group > div > .field-row:first-child { margin-top: 8px; }
+.secret-group > div > .field-row:last-child { margin-bottom: 0; }
 #event-reference > button { margin-bottom: 16px; }
 #event-reference > button[aria-expanded=false] { margin-bottom: 0; }
 #event-reference .actions { margin-bottom: 16px; }

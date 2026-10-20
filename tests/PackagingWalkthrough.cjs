@@ -20,7 +20,7 @@ const assert=require('node:assert/strict');
     await page.getByRole('button',{name:'Cancel',exact:true}).click();
     await page.getByRole('button',{name:'Rules',exact:true}).click();
     await page.getByRole('button',{name:'Edit rule',exact:true}).first().click();
-    assert.equal(await page.getByLabel('Replacement value',{exact:true}).first().inputValue(),'');
+    assert.equal(await page.getByLabel('Replacement value',{exact:true}).first().inputValue(),'••••••••');
     await page.getByRole('button',{name:'Cancel',exact:true}).click();
     await page.getByRole('button',{name:'Log out',exact:true}).click();
     await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();

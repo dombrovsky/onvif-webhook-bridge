@@ -215,8 +215,8 @@ const fieldDocumentation = {
   'HTTP method': 'GET sends a request without a JSON body. POST can send the configured literal JSON body. Either method can cause a real external action.',
   'Additional attempts (may duplicate effects)': 'Zero disables retries. One or two allows retries for transient failures within the job deadline. A retry can repeat an action already performed by the destination.',
   'Action URL': 'Full HTTP or HTTPS destination, for example https://destination.example/action. Sensitive URLs remain write-only after saving. Visible URLs are returned only to authenticated administrators. Never put credentials in a visible URL. Embedded username/password credentials are rejected.',
-  'HTTP headers': 'Optional custom request headers, stored write-only. Edit replaces the whole collection using name/value rows, for example X-Example and synthetic-value. Re-enter all required headers. Transport-controlled and duplicate header names are rejected.',
-  'JSON body': 'Optional literal JSON sent with POST, stored masked. Enter valid JSON, without templates or expressions. Clear removes the stored body.'
+  'HTTP headers': 'Optional custom request headers, stored write-only. Editing replaces the whole collection using name/value rows, for example X-Example and synthetic-value. Re-enter all required headers. Transport-controlled and duplicate header names are rejected.',
+  'JSON body': 'Optional literal JSON sent with POST, stored masked. Enter valid JSON, without templates or expressions. Delete the mask to remove the stored body on Save.'
 };
 let fieldSequence = 0;
 function fieldLabel(parent, label, documentation) {
@@ -252,49 +252,60 @@ function select(parent, label, choices, value, documentation) {
 }
 function secret(parent, label, present, kind = 'password', required = false, credential, initial = '') {
   const box = node('fieldset', undefined, parent); box.className = 'secret-group'; node('legend', label + ' · ' + (present ? 'stored' : 'not stored'), box);
-  const status = node('p', present ? '•••••••• · Stored; unchanged until you edit.' : 'No stored value.', box); status.className = 'secret-status';
-  const actions = node('div', undefined, box); actions.className = 'actions';
-  let operation = present ? 0 : (required ? 1 : 0);
+  const mask = '••••••••';
+  const status = node('p', 'Leave the mask unchanged to keep the saved value. Type to replace; empty to clear on Save.', box); status.className = 'secret-status';
   const values = node('div', undefined, box);
   const rows = [];
-  let value;
+  let value, maskedHeaders = Boolean(present);
+  const unmaskOnEdit = (control, isMasked, begin) => {
+    control.addEventListener('focus', () => { if (isMasked()) control.select(); });
+    control.addEventListener('beforeinput', () => { if (isMasked()) { begin(); control.value = ''; } });
+    control.addEventListener('input', () => { if (isMasked() && control.value !== mask) begin(); update(); });
+  };
   if (label === 'HTTP headers') {
     node('p', 'Editing replaces the entire stored collection. Re-enter every header you need.', values);
     const listing = node('div', undefined, values);
+    const begin = changed => {
+      maskedHeaders = false;
+      for (const item of rows) for (const control of [item.name, item.content]) if (control !== changed && control.value === mask) control.value = '';
+    };
     const add = () => {
       if (rows.length >= 32) return;
       const row = node('div', undefined, listing); row.className = 'header-row';
-      const name = input(row, 'Header name', '', 'text', true, 'Exact HTTP header name, for example X-Example. Transport-controlled headers and duplicate names are rejected. Maximum 32 headers.');
+      const name = input(row, 'Header name', '', 'text', false, 'Exact HTTP header name, for example X-Example. Transport-controlled headers and duplicate names are rejected. Maximum 32 headers.');
       const content = input(row, 'Header value', '', 'password', false, 'Replacement value for this header; empty values are allowed. Stored header values are never read back. All rows replace the entire collection on Save.');
-      content.dataset.allowEmpty = 'true';
       const item = { row, name, content }; rows.push(item);
-      button('Remove header', row, () => { rows.splice(rows.indexOf(item), 1); row.remove(); });
+      for (const control of [name, content]) unmaskOnEdit(control, () => maskedHeaders, () => begin(control));
+      button('Remove header', row, () => { begin(); rows.splice(rows.indexOf(item), 1); row.remove(); update(); });
     };
-    button('Add header', values, add); add();
+    const actions = node('div', undefined, values); actions.className = 'actions';
+    button('Add header', actions, () => { if (maskedHeaders) { begin(); for (const item of rows) item.row.remove(); rows.length = 0; } add(); update(); rows.at(-1).name.focus(); });
+    add();
+    if (present) for (const control of [rows[0].name, rows[0].content]) control.value = mask;
   } else {
-    value = input(values, 'Replacement value', initial, kind, false, fieldDocumentation[label]);
+    const baseline = present && !initial ? mask : initial;
+    value = input(values, 'Replacement value', baseline, kind, required, fieldDocumentation[label]);
+    unmaskOnEdit(value, () => present && !initial && value.value === mask, () => {});
     if (credential) {
       value.labels[0].htmlFor = credential.name; value.id = credential.name; value.name = credential.name;
       value.autocomplete = credential.autocomplete; value.autocapitalize = 'none'; value.spellcheck = false;
     }
   }
+  const operation = () => label === 'HTTP headers'
+    ? maskedHeaders ? 0 : rows.some(r => r.name.value || r.content.value) ? 1 : present ? 2 : 0
+    : present && value.value === (initial || mask) ? 0 : value.value ? 1 : present ? 2 : 0;
   const update = () => {
-    values.hidden = operation !== 1;
-    for (const control of values.querySelectorAll('input,textarea')) { control.disabled = operation !== 1; control.required = operation === 1 && control.dataset.allowEmpty !== 'true'; }
-    status.textContent = operation === 2 ? 'Will clear on Save. Undo is available.' : operation === 1 ? 'Replacement will be stored on Save.' : present ? '•••••••• · Stored; unchanged.' : 'No stored value.';
-    box.secretChanged?.(operation);
+    for (const item of rows) item.name.required = !maskedHeaders && Boolean(item.name.value || item.content.value);
+    status.textContent = operation() === 2 ? 'Will clear on Save.' : operation() === 1 ? 'Replacement will be stored on Save.' : present ? initial ? 'Saved value; unchanged.' : 'Saved value masked; unchanged. Type to replace or delete to clear on Save.' : 'No stored value.';
   };
-  button('Edit', actions, () => { operation = 1; update(); values.querySelector('input,textarea')?.focus(); });
-  button('Undo', actions, () => { operation = present ? 0 : (required ? 1 : 0); if (value) value.value = initial; for (const row of rows) { row.name.value = ''; row.content.value = ''; } update(); });
-  if (!required) button('Clear', actions, () => { if (confirm('Clear ' + label + ' on Save? You can undo before saving.')) { operation = 2; if (value) value.value = ''; for (const row of rows) { row.name.value = ''; row.content.value = ''; } update(); } });
   update();
   const read = () => {
-    const edit = { operation };
-    if (operation === 1) edit.value = label === 'HTTP headers' ? rows.map(r => ({ name: r.name.value, value: r.content.value })) : value.value;
-    if (label === 'JSON body' && operation === 1) JSON.parse(edit.value);
+    const edit = { operation: operation() };
+    if (edit.operation === 1) edit.value = label === 'HTTP headers' ? rows.filter(r => r.name.value || r.content.value).map(r => ({ name: r.name.value, value: r.content.value })) : value.value;
+    if (label === 'JSON body' && edit.operation === 1) JSON.parse(edit.value);
     return edit;
   };
-  read.box = box; read.input = value; read.controls = actions; read.replace = () => { operation = 1; update(); }; return read;
+  read.box = box; read.input = value; return read;
 }
 function editor(title, help, build) {
   $('fields').replaceChildren(); $('event-reference').replaceChildren(); $('event-reference').hidden = true; $('editor').classList.remove('rule-editor'); $('edit-title').textContent = title; $('edit-help').textContent = help; $('edit-error').textContent = '';
@@ -308,7 +319,7 @@ function editor(title, help, build) {
 }
 function editCamera(c, revision = state.config.revision) {
   const id = c?.id ?? crypto.randomUUID();
-  editor(c ? 'Edit camera' : 'Add camera', 'Credentials are never read back. Use Edit to replace or Clear to remove; otherwise they remain unchanged. Clear both username and password for unauthenticated access.', p => {
+  editor(c ? 'Edit camera' : 'Add camera', 'Saved credentials are masked. Type to replace or delete to clear on Save. Leave masks unchanged to keep saved values. Clear both username and password for unauthenticated access.', p => {
     const name = input(p, 'Name', c?.name ?? '', 'text', true), endpoint = input(p, 'Device-service URL', c?.endpoint ?? '', 'url', true), enabled = input(p, 'Enabled', c?.enabled ?? false, 'checkbox');
     const section = `section-camera-${encodeURIComponent(id)}`;
     const username = secret(p, 'Camera username', c?.hasUsername, 'text', false, { name: 'camera-username', autocomplete: `${section} username` });
@@ -371,15 +382,12 @@ function editRule(r, draft, observed, revision = state.config.revision) {
     const attempts = select(advanced, 'Additional attempts (may duplicate effects)', [[0,'0 — no retries'],[1,'1 retry'],[2,'2 retries']], r?.additionalAttempts ?? 0);
     const ignoreCertificateValidation = input(then, 'Ignore certificate validation', r?.ignoreCertificateValidation ?? false, 'checkbox', false, 'Accepts untrusted, expired or mismatched HTTPS certificates for this webhook only. This can expose tokens and request contents to an impersonated destination. Leave unchecked when possible.');
     const url = secret(then, 'Action URL', r?.hasUrl, 'text', true, undefined, r?.publicUrl ?? '');
-    if (r?.publicUrl != null) url.replace();
     const sensitive = { checked: r ? r.urlSensitive !== false : false };
     const visibility = node('p', undefined, url.box); visibility.className = 'secret-status';
     const lock = button('', url.input.parentElement, () => { sensitive.checked = !sensitive.checked; updateLock(); });
     lock.className = 'url-lock'; lock.setAttribute('aria-label', 'Sensitive URL'); lock.setAttribute('aria-describedby', url.input.getAttribute('aria-describedby'));
     const updateLock = () => { lock.textContent = sensitive.checked ? '🔒' : '🔓'; lock.setAttribute('aria-pressed', String(sensitive.checked)); visibility.textContent = sensitive.checked ? 'Sensitive: future reads show presence only. Making a stored sensitive URL visible requires re-entry.' : 'Visible to authenticated administrators after Save. Avoid tokens in visible URLs.'; }; updateLock();
     url.input.parentElement.classList.add('destination-row');
-    url.box.secretChanged = operation => { (operation === 1 ? url.input.parentElement : url.controls).append(lock); };
-    url.box.secretChanged(url().operation);
     url.input.className = 'maskable-value';
     const eye = button('Hide entered URL', url.input.parentElement, () => { url.input.type = url.input.type === 'password' ? 'text' : 'password'; eye.textContent = url.input.type === 'password' ? 'Show entered URL' : 'Hide entered URL'; }); eye.className = 'mask-toggle url-eye';
     const warning = node('p', 'Warning: unverified HTTPS permits interception and destination impersonation for this rule. Redirects and proxies remain disabled. Camera TLS stays strict.', then); warning.className = 'warning';
@@ -393,7 +401,7 @@ function editRule(r, draft, observed, revision = state.config.revision) {
     return () => {
       if (section.value !== '' && !field.value) throw new Error('A field condition requires a field name.');
       if (mode.value === '1' && section.value === '') throw new Error('Transition mode requires a field condition.');
-      if (r?.urlSensitive !== false && r?.hasUrl && !sensitive.checked && url().operation !== 1) throw new Error('Re-enter the URL using Edit before making a stored sensitive destination public.');
+      if (r?.urlSensitive !== false && r?.hasUrl && !sensitive.checked && url().operation !== 1) throw new Error('Re-enter the URL before making a stored sensitive destination public.');
       return api(`rules/${encodeURIComponent(id)}`, 'PUT', { revision, name: name.value, cameraId: camera.value, topic: topic.value, condition: section.value === '' ? null : { section: Number(section.value), name: field.value, expectedValue: expected.value, comparison: Number(comparison.value) }, mode: Number(mode.value), cooldownSeconds: Number(cooldown.value), enabled: r ? enabled.checked : false, method: method.value, additionalAttempts: Number(attempts.value), ignoreCertificateValidation: ignoreCertificateValidation.checked, urlSensitive: sensitive.checked, url: url(), headers: headers(), jsonBody: jsonBody() });
     };
   });
