@@ -51,6 +51,10 @@ Headers retain name/value rows: one masked row represents the opaque stored coll
 
 Verification: source-asset and rebuilt embedded-asset browser walkthroughs passed, including keyboard deletion, cancellation, untouched-secret preservation, replacement/clearing and outgoing payloads without masks. Desktop and phone secret-field screenshots were visually reviewed. Linux amd64 NativeAOT publication was warning-free and storage/authentication/API/TLS runtime checks passed. JavaScript syntax, diff whitespace and both required formatting commands passed; the sandbox initially blocked the formatter's build-host pipe, and the authorized rerun passed. No backend code changed, and the full JIT suite was not repeated for this browser-only follow-up.
 
+## URL control follow-up
+
+The later URL-control simplification removes the separate entered-URL show/hide button and its unused third grid column. The sensitivity lock remains beside the editable URL. Stored sensitive URLs still show the fixed mask, and sensitive-to-public changes still require replacement. The source-asset browser walkthrough, JavaScript syntax, diff whitespace and both required formatting checks passed. This control removal is browser-only; the native/backend verification above predates it.
+
 ## Remaining gates
 
 Phone checks use an emulated narrow Chromium viewport, not physical touch hardware or mobile Safari. Manual screen-reader validation remains pending; automated field associations, help disclosure, focus and keyboard behavior are covered. Final ARM64/native hardware and packaging/deployment were not rerun for this redesign. No physical camera or real action destination was contacted. Private device activation/reset/transition identity and device outage/reboot checks, real destination effects and deployment-host/proxy checks remain pending. Simulator and local-recorder acceptance does not establish hardware or destination-side interoperability. No merge, deployment or image publication is authorized by this PR.

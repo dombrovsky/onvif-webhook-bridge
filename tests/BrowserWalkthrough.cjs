@@ -214,10 +214,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     const actionUrlGroup=page.getByRole('group',{name:/^Action URL ·/});
     const actionUrlInput=actionUrlGroup.getByLabel('Replacement value',{exact:true});
     assert.equal(await actionUrlInput.getAttribute('type'),'text');
-    await actionUrlGroup.getByRole('button',{name:'Hide entered URL',exact:true}).click();
-    assert.equal(await actionUrlInput.getAttribute('type'),'password'); assert.equal(await actionUrlInput.inputValue(),recorder);
-    await actionUrlGroup.getByRole('button',{name:'Show entered URL',exact:true}).press('Space');
-    assert.equal(await actionUrlInput.getAttribute('type'),'text');
+    assert.equal(await actionUrlInput.inputValue(),recorder);
     // The reference retains the complete real event through edits, toggles and polls.
     const reference=page.locator('#event-reference');
     await reference.getByRole('button',{name:'Raw JSON',exact:true}).click();
@@ -293,7 +290,6 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Edit rule',exact:true}).click();
     assert.equal(await actionUrlInput.inputValue(),'••••••••'); assert.equal(await actionUrlInput.isDisabled(),false);
     assert.equal(await actionUrlInput.getAttribute('type'),'text');
-    assert.equal(await actionUrlGroup.getByRole('button',{name:'Hide entered URL',exact:true}).isVisible(),true);
     await actionUrlGroup.screenshot({path:'.local/secrets-field-desktop.png'});
     await page.setViewportSize({width:390,height:844});
     await actionUrlGroup.screenshot({path:'.local/secrets-field-mobile.png'});

@@ -389,7 +389,6 @@ function editRule(r, draft, observed, revision = state.config.revision) {
     const updateLock = () => { lock.textContent = sensitive.checked ? '🔒' : '🔓'; lock.setAttribute('aria-pressed', String(sensitive.checked)); visibility.textContent = sensitive.checked ? 'Sensitive: future reads show presence only. Making a stored sensitive URL visible requires re-entry.' : 'Visible to authenticated administrators after Save. Avoid tokens in visible URLs.'; }; updateLock();
     url.input.parentElement.classList.add('destination-row');
     url.input.className = 'maskable-value';
-    const eye = button('Hide entered URL', url.input.parentElement, () => { url.input.type = url.input.type === 'password' ? 'text' : 'password'; eye.textContent = url.input.type === 'password' ? 'Show entered URL' : 'Hide entered URL'; }); eye.className = 'mask-toggle url-eye';
     const warning = node('p', 'Warning: unverified HTTPS permits interception and destination impersonation for this rule. Redirects and proxies remain disabled. Camera TLS stays strict.', then); warning.className = 'warning';
     const tlsUpdate = () => { warning.hidden = !ignoreCertificateValidation.checked; }; ignoreCertificateValidation.onchange = tlsUpdate; tlsUpdate();
     const headers = secret(advanced, 'HTTP headers', r?.hasHeaders, 'textarea'), jsonBody = secret(advanced, 'JSON body', r?.hasJsonBody, 'textarea');
