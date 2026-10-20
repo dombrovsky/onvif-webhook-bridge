@@ -75,12 +75,12 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
       await firstIcon.press('Escape');
     }
     async function operation(label,op,value) {
-      const group=page.getByRole('group',{name:new RegExp('^'+label+' ·')});
+      const group=page.getByRole('group',{name:label,exact:true});
       assert.equal(await group.getByRole('button',{name:/^(Edit|Undo|Clear)$/}).count(),0);
       if(label==='HTTP headers') {
         while(await group.getByRole('button',{name:'Remove header',exact:true}).count()) await group.getByRole('button',{name:'Remove header',exact:true}).first().click();
         if(op===1) for(const header of JSON.parse(value)) { await group.getByRole('button',{name:'Add header',exact:true}).click(); await group.getByLabel('Header name',{exact:true}).last().fill(header.name); await group.getByLabel('Header value',{exact:true}).last().fill(header.value); }
-      } else await group.getByLabel('Replacement value',{exact:true}).fill(op===1?value:'');
+      } else await group.getByLabel(label,{exact:true}).fill(op===1?value:'');
     }
     async function screen(name) { await page.getByRole('button',{name:name==='Events'?'Event Explorer':name,exact:true}).click(); }
     async function verifyActionSpacing() {
@@ -211,8 +211,8 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Sensitive URL',exact:true}).click();
     await page.getByLabel('Rule name',{exact:true}).fill('Synthetic draft'); const recorder=(await api('/fixture/recorder')).text;
     await operation('Action URL',1,recorder); await page.getByLabel('HTTP method',{exact:true}).selectOption('POST');
-    const actionUrlGroup=page.getByRole('group',{name:/^Action URL ·/});
-    const actionUrlInput=actionUrlGroup.getByLabel('Replacement value',{exact:true});
+    const actionUrlGroup=page.getByRole('group',{name:'Action URL',exact:true});
+    const actionUrlInput=actionUrlGroup.getByLabel('Action URL',{exact:true});
     assert.equal(await actionUrlInput.getAttribute('type'),'text');
     assert.equal(await actionUrlInput.inputValue(),recorder);
     // The reference retains the complete real event through edits, toggles and polls.
@@ -299,7 +299,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Save',exact:true}).click();
     await page.getByRole('alert').filter({hasText:'Re-enter the URL'}).waitFor();
     await page.getByRole('button',{name:'Sensitive URL',exact:true}).click();
-    const storedHeaders=page.getByRole('group',{name:/^HTTP headers ·/});
+    const storedHeaders=page.getByRole('group',{name:'HTTP headers',exact:true});
     await storedHeaders.getByLabel('Header name',{exact:true}).focus();
     await storedHeaders.getByLabel('Header name',{exact:true}).press('Delete');
     assert.equal(await storedHeaders.getByLabel('Header name',{exact:true}).inputValue(),'');

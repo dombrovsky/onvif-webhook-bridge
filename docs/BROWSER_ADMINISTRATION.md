@@ -26,6 +26,8 @@ New browser rules default to a visible URL. Sensitive URL marks it write-only on
 
 Camera credentials, headers and JSON bodies remain write-only. Leave the fixed mask unchanged to preserve a saved value, type into the field to replace it, or delete the mask to clear it on Save. The first edit removes the entire mask; mask text is never submitted as a replacement. There are no Edit/Undo/Clear buttons or extra confirmation steps. Cancel discards changes. Closing or signing out also discards replacement values. Required URLs cannot be cleared. Clear both camera username and password for unauthenticated cameras.
 
+Secret fields show their name and editable value without stored/not-stored badges, status paragraphs or a second replacement label. Editing guidance is available through field help. The URL lock describes its state on hover and through its accessible pressed state.
+
 Header name/value rows replace the entire collection: re-enter all needed headers, including authentication. A single masked row represents the entire saved collection, without exposing its names, values or count. Editing either field starts a replacement collection; deleting its mask or removing the row clears it. Add header starts new rows, and blank rows are ignored. Stored rows are never reconstructed or incrementally edited. Values are masked while typing. POST bodies are literal JSON without interpolation. Changing POST to GET with a stored body requires deleting the body mask.
 
 Camera replacements retain stable names and per-camera username/current-password autocomplete sections. Password-manager prompts depend on the browser/profile and are not guaranteed. Sign-in preserves the submitted fields until successful navigation; failed sign-in stays on the form.

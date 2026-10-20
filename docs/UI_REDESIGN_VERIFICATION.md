@@ -57,4 +57,10 @@ The later URL-control simplification removes the separate entered-URL show/hide 
 
 ## Remaining gates
 
+## Field text cleanup
+
+The later text cleanup removes stored/not-stored legend suffixes, per-secret status paragraphs and duplicate Replacement value labels. Secret fields retain one visible name, an associated editable control and contextual help. The URL sensitivity explanation moves to the lock title while its accessible name and pressed state remain. The source-asset browser walkthrough passed, including existing secret preservation/replacement/clearing and session/revision behavior. Desktop and phone field screenshots were visually reviewed. JavaScript syntax, diff whitespace and both required formatting checks passed. Backend/native checks were not repeated for this text-only follow-up.
+
+## Remaining gates
+
 Phone checks use an emulated narrow Chromium viewport, not physical touch hardware or mobile Safari. Manual screen-reader validation remains pending; automated field associations, help disclosure, focus and keyboard behavior are covered. Final ARM64/native hardware and packaging/deployment were not rerun for this redesign. No physical camera or real action destination was contacted. Private device activation/reset/transition identity and device outage/reboot checks, real destination effects and deployment-host/proxy checks remain pending. Simulator and local-recorder acceptance does not establish hardware or destination-side interoperability. No merge, deployment or image publication is authorized by this PR.

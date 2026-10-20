@@ -251,9 +251,9 @@ function select(parent, label, choices, value, documentation) {
   for (const [v, text] of choices) { const o = node('option', text, s); o.value = v; } s.value = String(value); return s;
 }
 function secret(parent, label, present, kind = 'password', required = false, credential, initial = '') {
-  const box = node('fieldset', undefined, parent); box.className = 'secret-group'; node('legend', label + ' · ' + (present ? 'stored' : 'not stored'), box);
+  const box = node('fieldset', undefined, parent); box.className = 'secret-group'; box.setAttribute('aria-label', label);
+  if (label === 'HTTP headers') node('legend', label, box);
   const mask = '••••••••';
-  const status = node('p', 'Leave the mask unchanged to keep the saved value. Type to replace; empty to clear on Save.', box); status.className = 'secret-status';
   const values = node('div', undefined, box);
   const rows = [];
   let value, maskedHeaders = Boolean(present);
@@ -284,7 +284,7 @@ function secret(parent, label, present, kind = 'password', required = false, cre
     if (present) for (const control of [rows[0].name, rows[0].content]) control.value = mask;
   } else {
     const baseline = present && !initial ? mask : initial;
-    value = input(values, 'Replacement value', baseline, kind, required, fieldDocumentation[label]);
+    value = input(values, label, baseline, kind, required, fieldDocumentation[label] + ' Leave the mask unchanged to preserve the saved value; type to replace or delete to clear on Save.');
     unmaskOnEdit(value, () => present && !initial && value.value === mask, () => {});
     if (credential) {
       value.labels[0].htmlFor = credential.name; value.id = credential.name; value.name = credential.name;
@@ -296,7 +296,6 @@ function secret(parent, label, present, kind = 'password', required = false, cre
     : present && value.value === (initial || mask) ? 0 : value.value ? 1 : present ? 2 : 0;
   const update = () => {
     for (const item of rows) item.name.required = !maskedHeaders && Boolean(item.name.value || item.content.value);
-    status.textContent = operation() === 2 ? 'Will clear on Save.' : operation() === 1 ? 'Replacement will be stored on Save.' : present ? initial ? 'Saved value; unchanged.' : 'Saved value masked; unchanged. Type to replace or delete to clear on Save.' : 'No stored value.';
   };
   update();
   const read = () => {
@@ -319,7 +318,7 @@ function editor(title, help, build) {
 }
 function editCamera(c, revision = state.config.revision) {
   const id = c?.id ?? crypto.randomUUID();
-  editor(c ? 'Edit camera' : 'Add camera', 'Saved credentials are masked. Type to replace or delete to clear on Save. Leave masks unchanged to keep saved values. Clear both username and password for unauthenticated access.', p => {
+  editor(c ? 'Edit camera' : 'Add camera', 'Configure the ONVIF connection.', p => {
     const name = input(p, 'Name', c?.name ?? '', 'text', true), endpoint = input(p, 'Device-service URL', c?.endpoint ?? '', 'url', true), enabled = input(p, 'Enabled', c?.enabled ?? false, 'checkbox');
     const section = `section-camera-${encodeURIComponent(id)}`;
     const username = secret(p, 'Camera username', c?.hasUsername, 'text', false, { name: 'camera-username', autocomplete: `${section} username` });
@@ -383,10 +382,9 @@ function editRule(r, draft, observed, revision = state.config.revision) {
     const ignoreCertificateValidation = input(then, 'Ignore certificate validation', r?.ignoreCertificateValidation ?? false, 'checkbox', false, 'Accepts untrusted, expired or mismatched HTTPS certificates for this webhook only. This can expose tokens and request contents to an impersonated destination. Leave unchecked when possible.');
     const url = secret(then, 'Action URL', r?.hasUrl, 'text', true, undefined, r?.publicUrl ?? '');
     const sensitive = { checked: r ? r.urlSensitive !== false : false };
-    const visibility = node('p', undefined, url.box); visibility.className = 'secret-status';
     const lock = button('', url.input.parentElement, () => { sensitive.checked = !sensitive.checked; updateLock(); });
     lock.className = 'url-lock'; lock.setAttribute('aria-label', 'Sensitive URL'); lock.setAttribute('aria-describedby', url.input.getAttribute('aria-describedby'));
-    const updateLock = () => { lock.textContent = sensitive.checked ? '🔒' : '🔓'; lock.setAttribute('aria-pressed', String(sensitive.checked)); visibility.textContent = sensitive.checked ? 'Sensitive: future reads show presence only. Making a stored sensitive URL visible requires re-entry.' : 'Visible to authenticated administrators after Save. Avoid tokens in visible URLs.'; }; updateLock();
+    const updateLock = () => { lock.textContent = sensitive.checked ? '🔒' : '🔓'; lock.setAttribute('aria-pressed', String(sensitive.checked)); lock.title = sensitive.checked ? 'Sensitive URL: masked after saving. Unlocking requires re-entry.' : 'URL visible to authenticated administrators after saving.'; }; updateLock();
     url.input.parentElement.classList.add('destination-row');
     url.input.className = 'maskable-value';
     const warning = node('p', 'Warning: unverified HTTPS permits interception and destination impersonation for this rule. Redirects and proxies remain disabled. Camera TLS stays strict.', then); warning.className = 'warning';

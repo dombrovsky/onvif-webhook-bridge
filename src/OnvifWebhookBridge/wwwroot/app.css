@@ -5,7 +5,7 @@ body { margin: 0 auto; max-width: 1480px; padding: 28px 36px; }
 .brand > span { color: var(--accent); font-size: 38px; }
 h1,h2,h3,h4,p { margin: 0 0 12px; }
 h1 { font-size: 21px; letter-spacing: -.6px; } h2 { font-size: 27px; letter-spacing: -.7px; margin: 20px 0 8px; } h3 { font-size: 16px; } h4 { color: var(--muted); letter-spacing: .08em; margin-top: 18px; }
-.brand p, #connection, footer, #edit-help, .secret-status { color: var(--muted); font-size: 12px; }
+.brand p, #connection, footer, #edit-help { color: var(--muted); font-size: 12px; }
 .brand p { margin: 0; }
 nav { display: flex; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 nav button { background: transparent; border-color: transparent; } #logout { margin-left: auto; }
@@ -58,7 +58,6 @@ footer { border-top: 1px solid var(--line); margin-top: 30px; padding-top: 14px;
 .field-help:not(.dismissed):hover .field-tooltip, .field-help:not(.dismissed):focus-within .field-tooltip, .field-help.pinned:not(.dismissed) .field-tooltip { display: block; }
 .header-row { border-top: 1px solid var(--line); padding: 8px 0; }
 .header-row > button { margin-bottom: 8px; }
-.secret-group > .secret-status { margin-bottom: 8px; }
 .secret-group > div > .field-row:first-child { margin-top: 8px; }
 .secret-group > div > .field-row:last-child { margin-bottom: 0; }
 #event-reference > button { margin-bottom: 16px; }
