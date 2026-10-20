@@ -122,14 +122,15 @@ function render(preserveSelection = false) {
   const scroll = window.scrollY;
   const focus = $('screen').contains(document.activeElement) ? { text: document.activeElement.textContent, key: document.activeElement.closest('article')?.dataset.key } : null;
   const area = $('screen'); area.dataset.revision = String(displayedRevision); area.replaceChildren(); node('h2', state.screen === 'Events' ? 'Event Explorer' : state.screen, area);
-  button('Refresh now', area, refresh);
+  const toolbar = node('div', undefined, area); toolbar.className = 'actions screen-actions';
+  button('Refresh now', toolbar, refresh);
   if (state.screen === 'Overview') {
     node('p', 'Live process snapshot · notification and execution history is bounded and clears on restart.', area);
     const metrics = node('div', undefined, area); metrics.className = 'metrics';
     for (const [label, value] of [['Cameras subscribed', `${state.config.cameras.filter(c => c.enabled && state.cameras.some(s => s.cameraId === c.id && s.state === 'Subscribed')).length}/${state.config.cameras.length}`], ['Enabled rules', state.config.rules.filter(r => r.match.enabled).length], ['Retained notifications', state.events.length]]) {
       const card = node('article', undefined, metrics); node('p', label, card); node('strong', value, card);
     }
-    button('Add camera', area, () => editCamera()); button('Add rule', area, () => editRule());
+    button('Add camera', toolbar, () => editCamera()); button('Add rule', toolbar, () => editRule());
     node('h3', 'Recent completed executions', area);
     for (const e of [...state.completed].sort((a,b) => Date.parse(b.time)-Date.parse(a.time)).slice(0,8)) {
       const card = node('article', undefined, area); node('h3', state.config.rules.find(r => r.match.id === e.ruleId)?.name ?? e.ruleId, card); node('p', statusText(e), card); executionDetails(card, e.ruleId, e);
@@ -138,7 +139,7 @@ function render(preserveSelection = false) {
     node('h3', 'Recent notifications', area);
     for (const e of [...state.events].reverse().slice(0,5)) eventCard(area, e);
   } else if (state.screen === 'Cameras') {
-    button('Add camera', area, () => editCamera());
+    button('Add camera', toolbar, () => editCamera());
     if (!state.config.cameras.length) node('p', 'No cameras configured. Add a device-service endpoint to begin discovering events.', area);
     for (const c of state.config.cameras) {
       const a = node('article', undefined, area); a.dataset.key = c.id; node('h3', c.name, a); node('p', c.endpoint, a);
@@ -152,7 +153,7 @@ function render(preserveSelection = false) {
       button('Delete camera', actions, async () => { if (confirm('Delete this camera? Remove its rules first.')) await mutate(`cameras/${encodeURIComponent(c.id)}`, 'DELETE', { revision: displayedRevision }); });
     }
   } else if (state.screen === 'Rules') {
-    button('Add rule', area, () => editRule());
+    button('Add rule', toolbar, () => editRule());
     if (!state.config.rules.length) node('p', 'No rules configured. Inspect an observed event to draft an exact disabled rule.', area);
     node('p', 'Manual HTTP tests send real requests to the saved destination, including for disabled rules. A camera must be enabled. Retries may duplicate effects.', area);
     for (const r of state.config.rules) {
@@ -250,7 +251,7 @@ function select(parent, label, choices, value, documentation) {
   for (const [v, text] of choices) { const o = node('option', text, s); o.value = v; } s.value = String(value); return s;
 }
 function secret(parent, label, present, kind = 'password', required = false, credential, initial = '') {
-  const box = node('fieldset', undefined, parent); node('legend', label + ' · ' + (present ? 'stored' : 'not stored'), box);
+  const box = node('fieldset', undefined, parent); box.className = 'secret-group'; node('legend', label + ' · ' + (present ? 'stored' : 'not stored'), box);
   const status = node('p', present ? '•••••••• · Stored; unchanged until you edit.' : 'No stored value.', box); status.className = 'secret-status';
   const actions = node('div', undefined, box); actions.className = 'actions';
   let operation = present ? 0 : (required ? 1 : 0);

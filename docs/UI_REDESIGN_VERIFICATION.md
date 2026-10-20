@@ -37,6 +37,12 @@ Initial failures are not passes: sandboxed testhost connection failed; rerunning
 
 Desktop and phone screenshots are ignored local artifacts under .local/redesign-*.png and are visually reviewed; test-runtime addresses and synthetic replacement values are not committed. The prototype itself and downloaded handoff are not copied into the repository.
 
+## Button spacing follow-up
+
+The spacing review found ungrouped Refresh/Add buttons touching, compounded secret-status/action/field margins, missing separation after the event-reference toggle and tabs, an inspector Close button touching its draft actions, and uneven editor-footer padding. Screen actions now share a wrapping toolbar with 8px gaps and a 24px content boundary; contextual secret/reference spacing uses 8px and 16px intervals. Metrics no longer inherit article margins inside their grid. Editor actions use matching gaps and balanced padding, and an empty error message adds no blank space.
+
+Both source-asset and final embedded-asset browser walkthroughs passed with all existing behavior checks. Added layout checks cover all four screens at 320, 390, 768 and 1280px, action separation and group containment, horizontal overflow, populated rule cards and desktop/phone rule-editor actions. Desktop and phone screenshots were visually inspected. JavaScript syntax, diff whitespace and both required dotnet whitespace-format commands passed. The rebuilt Linux amd64 NativeAOT storage/security/TLS verification passed with warning-free production and fixture publication. No backend code changed; the full JIT suite was not repeated for this spacing-only follow-up.
+
 ## Remaining gates
 
 Phone checks use an emulated narrow Chromium viewport, not physical touch hardware or mobile Safari. Manual screen-reader validation remains pending; automated field associations, help disclosure, focus and keyboard behavior are covered. Final ARM64/native hardware and packaging/deployment were not rerun for this redesign. No physical camera or real action destination was contacted. Private device activation/reset/transition identity and device outage/reboot checks, real destination effects and deployment-host/proxy checks remain pending. Simulator and local-recorder acceptance does not establish hardware or destination-side interoperability. No merge, deployment or image publication is authorized by this PR.

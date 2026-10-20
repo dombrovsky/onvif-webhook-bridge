@@ -23,6 +23,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     if (process.env.ONVIF_BROWSER_SOURCE_ASSETS === '1') {
       // Development-only asset seam; the default walkthrough verifies embedded native assets.
       for (const file of ['app.js','app.css']) await page.route('**/'+file,route=>route.fulfill({path:require('node:path').resolve('src/OnvifWebhookBridge/wwwroot',file),contentType:file.endsWith('.js')?'text/javascript':'text/css'}));
+      await page.route(base+'/',route=>route.fulfill({path:require('node:path').resolve('src/OnvifWebhookBridge/wwwroot/index.html'),contentType:'text/html'}));
     }
     await page.goto(base);
     async function login() {
@@ -77,6 +78,25 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
       else await group.getByLabel('Replacement value',{exact:true}).fill(value);
     } }
     async function screen(name) { await page.getByRole('button',{name:name==='Events'?'Event Explorer':name,exact:true}).click(); }
+    async function verifyActionSpacing() {
+      const problems = await page.evaluate(() => {
+        const problems = [];
+        for (const group of document.querySelectorAll('.actions, .editor-actions')) {
+          if (!group.checkVisibility()) continue;
+          const buttons = [...group.children].filter(e=>e.tagName==='BUTTON' && e.checkVisibility()).map(e=>e.getBoundingClientRect());
+          for (let i=0;i<buttons.length;i++) for(let j=i+1;j<buttons.length;j++) {
+            const a=buttons[i], b=buttons[j];
+            const horizontal=Math.max(a.left-b.right,b.left-a.right);
+            const vertical=Math.max(a.top-b.bottom,b.top-a.bottom);
+            if(horizontal<7 && vertical<7) problems.push('Buttons touch or have insufficient separation');
+          }
+          const bounds=group.getBoundingClientRect();
+          if(buttons.some(b=>b.left<bounds.left-1 || b.right>bounds.right+1)) problems.push('Button extends outside its group');
+        }
+        return problems;
+      });
+      assert.deepEqual(problems,[]);
+    }
     async function trigger(value, selectedTopic=topic) { const r=await fetch(control+'/api/cameras/synthetic-camera/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:selectedTopic,state:value,duration:0})}); assert(r.ok); }
     // A rejected sign-in stays on the form; only authenticated success navigates.
     let rejectedNavigations=0;
@@ -89,6 +109,17 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     assert.equal(rejectedNavigations,0); assert(await page.locator('#login').isVisible());
     page.off('framenavigated',rejectedNavigation);
     await login();
+    for (const width of [320,390,768,1280]) {
+      await page.setViewportSize({width,height:900});
+      for (const name of ['Overview','Cameras','Rules','Events']) {
+        await screen(name); await verifyActionSpacing();
+        assert(await page.locator('#screen > .screen-actions').count()===1);
+        assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      }
+      await screen('Overview');
+      if(width===390 || width===1280) await page.screenshot({path:`.local/spacing-overview-${width}.png`,fullPage:true});
+    }
+    await screen('Cameras');
     await page.getByRole('button',{name:'Add camera',exact:true}).click();
     const cameraUsername=page.locator('#camera-username'), cameraPassword=page.locator('#camera-password');
     assert.equal(await page.locator('#edit-form').getAttribute('method'),'post');
@@ -191,11 +222,13 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.setViewportSize({width:390,height:844});
     await page.locator('#editor').evaluate(e=>e.scrollTop=0);
     await page.screenshot({path:'.local/redesign-mobile-editor.png'});
+    await verifyActionSpacing();
     assert(await page.evaluate(()=>document.querySelector('#editor').scrollWidth<=innerWidth));
     await page.getByRole('button',{name:'Save',exact:true}).scrollIntoViewIfNeeded();
     await page.setViewportSize({width:1280,height:900});
     await page.locator('#editor').evaluate(e=>e.scrollTop=0);
     await page.screenshot({path:'.local/redesign-desktop-editor.png'});
+    await verifyActionSpacing();
     await page.getByText('Advanced matching & delivery',{exact:true}).evaluate(e=>e.parentElement.open=true);
     await operation('HTTP headers',1,'[{"name":"X-Synthetic","value":"synthetic-browser-token"},{"name":"X-Empty-Synthetic","value":""}]');
     await operation('JSON body',1,'{invalid-synthetic-json'); await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -274,6 +307,7 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
     await page.getByRole('button',{name:'Enable rule',exact:true}).click();
     await waitFor(async()=>await page.getByRole('button',{name:'Disable rule',exact:true}).count()===2,'both rules enabled in refreshed screen');
     await page.screenshot({path:'.local/phase7-rules.png',fullPage:true});
+    await verifyActionSpacing();
     const before=Number((await api('/fixture/count')).text); await trigger(true); await waitFor(async()=>Number((await api('/fixture/count')).text)>=before+2,'multiple matching deliveries');
     await screen('Cameras'); await page.getByRole('button',{name:'Delete camera',exact:true}).click(); await page.getByText("Remove this camera's rules before deleting it.",{exact:true}).waitFor();
     // Explicit credential clear: configured connection becomes disconnected, UI remains responsive.
