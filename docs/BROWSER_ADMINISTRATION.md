@@ -20,6 +20,16 @@ On phones, View event / Hide event controls an inline reference above the form. 
 
 General, WHEN and THEN sections expose the common settings. Advanced matching & delivery holds Text/Boolean, Occurrence/Transition, cooldown, retries, header rows and literal JSON body; it opens automatically when relevant existing settings are active. Text is ordinal/case-sensitive; Boolean accepts true/1 and false/0 only. Transition requires a field condition and a known nonmatching-to-matching change; first observations/Initialized establish baseline and Deleted clears state. Retry defaults to zero and can duplicate side effects. Verify real activation/reset and stable identity privately before enabling a hardware transition mapping.
 
+## Screenshots
+
+Public screenshots are not yet included. Capture the current application with synthetic camera/event data and a local recorder, then review every visible field before committing:
+
+- Overview: connection counts, recent events and execution results.
+- Event Explorer: a selected synthetic observation with topic and Source/Data fields.
+- Rule editor: the event reference alongside WHEN/THEN configuration.
+
+Exclude real endpoints, credentials, tokens, private payloads and device identities. Existing ignored test screenshots are verification artifacts, not approved public assets. Do not substitute mockups for application screenshots.
+
 ## URLs and secrets
 
 New browser rules default to a visible URL. Sensitive URL marks it write-only on future API reads, including after reload. The lock beside the URL controls its saved sensitivity; there is no separate show/hide button. Existing sensitive URLs show a fixed mask in an editable field. Sensitive-to-visible changes require re-entry; a stored secret cannot be revealed. Visible-to-sensitive changes can preserve the destination. Visible URLs are available only to authenticated administrators and should contain no tokens. Existing databases and API callers that omit classification retain write-only URLs.
