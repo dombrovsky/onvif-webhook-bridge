@@ -71,6 +71,14 @@ See [browser administration](docs/BROWSER_ADMINISTRATION.md) for matching, secre
 
 These are integration possibilities, not claims of end-to-end verification with those products. Automated delivery tests use an ONVIF simulator and local HTTP recorders; real destination effects remain unverified.
 
+## Screenshots
+
+Actual application screens using synthetic ONVIF events and a local HTTP recorder. No personal camera or destination data is shown.
+
+![Overview with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)
+
+[Event Explorer](docs/images/event-explorer.png) · [Rule editor with an observed event reference](docs/images/rule-editor.png)
+
 ## Documentation
 
 - [Deployment, upgrades, backup and troubleshooting](docs/DEPLOYMENT.md)
@@ -80,7 +88,7 @@ These are integration possibilities, not claims of end-to-end verification with 
 - [Security and reporting vulnerabilities](SECURITY.md)
 - [Development, tests and diagnostic probe](docs/DEVELOPMENT.md)
 
-Sanitized screenshots are still needed for the Overview, Event Explorer and rule editor; see the [screenshot checklist](docs/BROWSER_ADMINISTRATION.md#screenshots).
+See [browser administration](docs/BROWSER_ADMINISTRATION.md#screenshots) for screenshot provenance and safe replacement guidance.
 
 ## Compatibility and limitations
 

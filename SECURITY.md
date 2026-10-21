@@ -14,6 +14,6 @@ There is one administrator account and no multi-user/RBAC model. Keep deployment
 
 ## Reporting a vulnerability
 
-Do not disclose an unpatched vulnerability, credentials or private captures in a public issue. If the repository's **Security → Report a vulnerability** option is available, use it for a private report. That reporting channel has not yet been verified as enabled; enabling and testing it is a public-release prerequisite. Until a private channel is available, open an issue asking the maintainer for a private reporting method without including exploit or sensitive details.
+Do not disclose an unpatched vulnerability, credentials or private captures in a public issue. If the repository's **Security → Report a vulnerability** option is available, use it for a private report. GitHub [supports private vulnerability reporting for public repositories](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository). While this repository remains private, it cannot be enabled here; enable and test it as part of making the repository public. Until a private channel is available, open an issue asking the maintainer for a private reporting method without including exploit or sensitive details.
 
 Provide affected revisions, a sanitized description and reproduction steps through the agreed private channel. Never submit a real configuration database, password file or unsanitized SOAP capture.

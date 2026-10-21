@@ -22,13 +22,13 @@ General, WHEN and THEN sections expose the common settings. Advanced matching & 
 
 ## Screenshots
 
-Public screenshots are not yet included. Capture the current application with synthetic camera/event data and a local recorder, then review every visible field before committing:
+- [Overview](images/overview.png): subscribed camera count, recent events and accepted HTTP execution.
+- [Event Explorer](images/event-explorer.png): synthetic observations with exact topics and boolean values.
+- [Rule editor](images/rule-editor.png): WHEN/THEN configuration alongside a retained event reference; the saved destination is masked.
 
-- Overview: connection counts, recent events and execution results.
-- Event Explorer: a selected synthetic observation with topic and Source/Data fields.
-- Rule editor: the event reference alongside WHEN/THEN configuration.
+Captured on 2026-10-21 from the Linux amd64 production NativeAOT image for application revision `592e884` (merged as `fa0fad6`). Its embedded HTML, CSS and JavaScript were compared with the current source before capture. Actual onvifsim notifications and a disposable HTTP recorder populated the unmodified UI; no mocked API responses or development asset substitution was used. Recorder HTTP 204 acceptance is separate from real destination interoperability.
 
-Exclude real endpoints, credentials, tokens, private payloads and device identities. Existing ignored test screenshots are verification artifacts, not approved public assets. Do not substitute mockups for application screenshots.
+Screenshots were visually reviewed and visible text was checked for endpoint addresses and fixture passwords. They contain only synthetic camera/event data. When replacing them, use the same safeguards: exclude real endpoints, credentials, tokens, private payloads and device identities. Keep unsanitized test screenshots in ignored local storage.
 
 ## URLs and secrets
 

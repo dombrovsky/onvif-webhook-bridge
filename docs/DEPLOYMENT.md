@@ -111,9 +111,19 @@ No GitHub releases were listed at review time. Registry inventory could not be v
 Before offering a public release:
 
 - Review the exact release revision's native amd64/arm64 CI results, tag protections and existing [hardware/host/destination gates](DEPLOYMENT_VERIFICATION.md#remaining-gates-and-concrete-handoff). Keep unverified device behavior explicit; inspect current workflow logs rather than relying on historical test totals.
-- Establish and test a private vulnerability-reporting channel; see [security](../SECURITY.md). Its availability was not confirmed during this review.
-- Review tracked files and Git history for secrets and private device data before changing visibility. The documentation diff audit is not a full history audit.
-- Capture the three sanitized [UI screenshots](BROWSER_ADMINISTRATION.md#screenshots).
+- When making the repository public, enable GitHub private vulnerability reporting and verify the reporting form; see [security](../SECURITY.md). GitHub restricts this feature to public repositories, and its API returned 404 while this repository was private. Visibility was left unchanged; no security contact email is published.
+- Repeat the [history and tracked-file privacy audit](#privacy-audit-and-screenshot-verification) for the final public revision. The current audit passed within its stated scope; it does not certify remote caches or third-party copies.
+- Keep the three reviewed [UI screenshots](BROWSER_ADMINISTRATION.md#screenshots) aligned with the released interface; replace them using synthetic data when needed.
 - When image publication is separately authorized, verify GHCR package access, trusted publication and the resulting platform manifest. Only then add a tested immutable image reference to the quick start. `ONVIF_IMAGE` selects the image in Compose; use `docker compose pull` and `docker compose up -d --no-build` for a verified published image. Keep the password-file, volume and bind defaults unchanged.
 
-The [Sponsors profile](https://github.com/sponsors/dombrovsky) was verified active on 2026-10-21; `.github/FUNDING.yml` links it. Sponsorship is optional. This documentation change does not publish images, create a release, enable reporting, or change repository visibility.
+The [Sponsors profile](https://github.com/sponsors/dombrovsky) was verified active on 2026-10-21; `.github/FUNDING.yml` links it. Sponsorship is optional. This documentation change does not publish images, create a release, or change repository visibility. Private vulnerability reporting remains a public-visibility step as requested.
+
+### Privacy audit and screenshot verification
+
+On 2026-10-21, the pre-screenshot revision `cfaf4e9` was audited after refreshing origin. The checkout is not shallow. Coverage included 42 commits across available local/remote refs and reflogs, 120 historical paths, and all 619 locally stored objects, including 370 file-content blobs. Deleted and unreachable local content was included; ignored private configuration and rollback repositories were not added to Git or uploaded.
+
+Gitleaks 8.30.1, downloaded from its official release and checked against its published SHA-256 checksum, scanned all refs/reflogs with full history. It reported 30 commits scanned, approximately 2.12 MB scanned, and zero secret findings. A separate all-object privacy scan reviewed addresses, URL hosts, network identities, personal paths, device/setup references, credential assignments and key/token markers. Findings were generic source/security checks, synthetic fixtures, public project/dependency references and loopback defaults. Known-value matches were an ordinary administrator label and a source-code expression, not private configuration. No real credentials, private device endpoints or identifying setup details were found in this scope. Raw findings remain in ignored private local storage.
+
+The final 119-file tracked snapshot, including the screenshot/documentation follow-up, passed a separate Gitleaks scan with zero findings; relative links/anchors and diff whitespace were also checked before commit. The three screenshots show the unmodified current production UI with actual simulator events and successful delivery to a local HTTP recorder; assets, visible content and image metadata were checked. This is focused synthetic screenshot verification, not a repeat of the full integration suite or a hardware/destination interoperability claim.
+
+This audit cannot certify inaccessible remote recovery objects, forks, third-party clones, caches, historical external logs or secrets a scanner cannot recognize. Repeat it for new changes before public release. No history rewrite, recovery deletion, key rotation or publication was performed.
