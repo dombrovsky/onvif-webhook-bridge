@@ -2,6 +2,12 @@ using OnvifWebhookBridge.Dispatch;
 using OnvifWebhookBridge.Persistence;
 using OnvifWebhookBridge.Web;
 
+if (args is ["--version"])
+{
+    Console.WriteLine(ApplicationVersion.Current);
+    return;
+}
+
 if (args is ["--health-probe"])
 {
     Environment.ExitCode = await HealthProbe.Run(Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"));

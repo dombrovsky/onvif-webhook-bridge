@@ -1,6 +1,7 @@
 **/bin/
 **/obj/
 .local/
+__pycache__/
 .env
 *.local.*
 **/Properties/launchSettings.json

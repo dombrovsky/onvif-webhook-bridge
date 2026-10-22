@@ -18,16 +18,26 @@ RUN if [ "$BUILDARCH" != "$TARGETARCH" ]; then \
     fi
 FROM toolchain AS build
 ARG TARGETARCH
+ARG VERSION
+ARG REVISION
 WORKDIR /source
 COPY Directory.Build.props Directory.Build.targets ./
 COPY src/OnvifWebhookBridge/OnvifWebhookBridge.csproj src/OnvifWebhookBridge/
 RUN dotnet restore src/OnvifWebhookBridge/OnvifWebhookBridge.csproj -a $TARGETARCH
 COPY src/OnvifWebhookBridge/ src/OnvifWebhookBridge/
+# An optional label input must agree with the source; it never overrides MSBuild's version.
+RUN test -z "$VERSION" || test "$VERSION" = "$(dotnet msbuild src/OnvifWebhookBridge/OnvifWebhookBridge.csproj -getProperty:Version)"
 RUN dotnet publish src/OnvifWebhookBridge/OnvifWebhookBridge.csproj \
-    --configuration Release --output /app/publish -a $TARGETARCH -p:StripSymbols=true \
+    --configuration Release --output /app/publish -a $TARGETARCH -p:StripSymbols=true -p:SourceRevisionId=$REVISION \
     && rm -f /app/publish/*.dbg
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble@sha256:da5846024d0008b48259b53a8953d39381fe5b7ec99ef1449ba4ba927f201490 AS final
+ARG VERSION
+ARG REVISION
+LABEL org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$REVISION \
+      org.opencontainers.image.source="https://github.com/dombrovsky/onvif-webhook-bridge" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY --from=build /app/publish/ ./
 RUN mkdir /data && chown 1654:1654 /data && chmod 0700 /data

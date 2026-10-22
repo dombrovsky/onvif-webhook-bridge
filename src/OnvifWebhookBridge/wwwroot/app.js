@@ -125,6 +125,7 @@ function render(preserveSelection = false) {
   const toolbar = node('div', undefined, area); toolbar.className = 'actions screen-actions';
   button('Refresh now', toolbar, refresh);
   if (state.screen === 'Overview') {
+    const version = node('p', `v${state.session.version}`, area); version.className = 'app-version';
     node('p', 'Live process snapshot · notification and execution history is bounded and clears on restart.', area);
     const metrics = node('div', undefined, area); metrics.className = 'metrics';
     for (const [label, value] of [['Cameras subscribed', `${state.config.cameras.filter(c => c.enabled && state.cameras.some(s => s.cameraId === c.id && s.state === 'Subscribed')).length}/${state.config.cameras.length}`], ['Enabled rules', state.config.rules.filter(r => r.match.enabled).length], ['Retained notifications', state.events.length]]) {

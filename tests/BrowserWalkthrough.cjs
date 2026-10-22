@@ -38,6 +38,9 @@ async function waitFor(fn, label) { const end = Date.now()+25000; while (Date.no
       await page.getByRole('button',{name:'Sign in',exact:true}).click(); await navigation;
       await page.getByRole('button',{name:'Add camera',exact:true}).waitFor();
       await page.getByRole('heading',{name:'Overview',exact:true}).waitFor();
+      const compiledVersion = await page.evaluate(async () => (await (await fetch('/api/session')).json()).version);
+      await page.locator('.app-version').waitFor();
+      assert.equal(await page.locator('.app-version').textContent(), 'v' + compiledVersion);
       await page.getByText('Cameras subscribed',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Cameras',exact:true}).click();
       assert.equal(await page.locator('#admin-password').inputValue(),'');

@@ -1,64 +1,110 @@
-name: Release images
+name: Release
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version already merged in Directory.Build.props (no v), e.g. 0.1.0-rc.1'
+        required: true
+        type: string
+      revision:
+        description: 'Full 40-character commit SHA from protected main to build and release'
+        required: true
+        type: string
 permissions:
   contents: read
-# Keep shared platform tags and manifest assembly within one verified run.
+# All versions share latest and the same registries. Never cancel an active publisher.
 concurrency:
-  group: release-images-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 jobs:
-  verify:
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
-  platform:
-    needs: verify
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
+  preflight:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    timeout-minutes: 10
     steps:
+      - name: Require main dispatch
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          if [ "$DISPATCH_REF" != refs/heads/main ]; then
+            echo 'Run Release from main in the Actions branch selector.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Validate source, protection and unused version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ inputs.revision }}
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: python3 build/release.py preflight --version "$VERSION" --revision "$REVISION" --namespace "$NAMESPACE"
+  verify:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ inputs.revision }}
+      version: ${{ inputs.version }}
+    permissions:
+      contents: read
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: image-${{ matrix.arch }}
+          pattern: image-*
+          merge-multiple: true
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish verified image
-        env:
-          REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ github.ref_name }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          image="ghcr.io/${REPOSITORY,,}"
-          docker load -i "image-$ARCH.tar"
-          docker tag onvif-webhook-bridge:verify "$image:$VERSION-$ARCH"
-          docker push "$image:$VERSION-$ARCH"
-  manifest:
-    needs: platform
-    runs-on: ubuntu-24.04
-    permissions:
-      packages: write
-    steps:
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Assemble platform manifest
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Publish the tested content to both registries and finalize release
         env:
-          REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ inputs.revision }}
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: python3 build/release.py publish --version "$VERSION" --revision "$REVISION" --namespace "$NAMESPACE"
+      - name: Preserve publication evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence
+          path: release-oci/release.json
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Explain incomplete publication
+        if: failure()
         run: |
-          image="ghcr.io/${REPOSITORY,,}"
-          docker buildx imagetools create -t "$image:$VERSION" "$image:$VERSION-amd64" "$image:$VERSION-arm64"
-          docker buildx imagetools inspect "$image:$VERSION"
-          docker buildx imagetools inspect "$image:$VERSION" --raw | jq -e '[.manifests[] | select(.platform.os != "unknown") | .platform.os + "/" + .platform.architecture] | sort == ["linux/amd64", "linux/arm64"]'
+          echo 'Release incomplete. Check the failed step, any reserved tag/draft, both registries and stable latest aliases. Never overwrite an existing version. See docs/DEPLOYMENT.md#recovering-a-failed-release.' >> "$GITHUB_STEP_SUMMARY"
