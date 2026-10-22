@@ -36,9 +36,19 @@ cp .env.example .env
 
 Until the repository is public, cloning requires authorized GitHub access.
 
-1. Edit `.env`: replace `ONVIF_ADMIN_USERNAME` with your chosen administrator name. Keep `ONVIF_IMAGE=onvif-webhook-bridge:local` for this local build and keep the loopback bind default.
-2. Create the file specified by `ONVIF_ADMIN_PASSWORD_PATH` (default `./.local/administrator-password`). Put a unique password of 12–4096 UTF-16 units in this UTF-8 file; a trailing newline is removed. Keep the password out of `.env`, command arguments and Git.
-3. Restrict the password file and its parent directory. The container runs as UID/GID **1654:1654** and must be able to read the mounted file. On a conventional Linux Docker host, keep `.local` private to the operator (`0700`) and give the file owner `1654:1654` with mode `0600`. Compose does not reliably remap file-secret permissions. NAS ACLs and rootless Docker may require host-specific ownership setup; see [password-file and volume requirements](docs/DEPLOYMENT.md#first-start).
+Edit `.env`: replace `ONVIF_ADMIN_USERNAME` with your chosen administrator name. Keep the local image and loopback bind defaults.
+
+On a standard Linux Docker host, use **Bash** and `sudo` to create the default password file. Enter a unique password of at least 12 characters when prompted; input is hidden. See [password requirements](docs/ADMINISTRATION.md#initial-setup) for exact limits.
+
+```bash
+install -d -m 700 .local
+read -r -s -p 'Administrator password (at least 12 characters): ' bridge_password
+printf '\n'
+printf '%s' "$bridge_password" | sudo install -m 600 -o 1654 -g 1654 /dev/stdin .local/administrator-password
+unset bridge_password
+```
+
+This keeps the directory private to your account and the password file owned by the container's UID/GID **1654:1654**. Its path matches `ONVIF_ADMIN_PASSWORD_PATH` in `.env`. For NAS ACLs or rootless Docker, see [password-file permissions](docs/DEPLOYMENT.md#first-start).
 
 Then run from the repository directory:
 
@@ -57,11 +67,13 @@ Compose creates the persistent `bridge-data` volume at `/data`. Keep it across u
 
 1. In **Cameras**, choose **Add camera**, enter its ONVIF device-service URL and credentials, and enable the connection. **Test connectivity** checks reachability; wait for subscription status separately.
 2. Open **Event Explorer**, generate a detection at the camera, and inspect the actual topic and fields. Event support depends on the camera and its existing configuration.
-3. Draft a rule from the observed topic or a scalar Source/Data field. Review the match and set your HTTP destination, method and optional headers/JSON. New rules save **disabled**. Mark URLs containing tokens as sensitive.
+3. Draft a rule from the observed topic or a Source/Data value. Review the match and set your HTTP destination, method and optional headers/JSON. New rules save **disabled**. Mark URLs containing tokens as sensitive.
 4. Use the rule's manual HTTP test and inspect its execution result. **This sends a real request**, even for a disabled rule; the camera must be enabled. A 2xx response confirms HTTP acceptance, so verify the intended effect at the destination separately.
 5. Enable the reviewed rule, generate another event, and check delivery. Use occurrence mode initially; transition mode needs a verified activation/reset cycle and stable event identity.
 
 See [browser administration](docs/BROWSER_ADMINISTRATION.md) for matching, secrets, retries and execution details. Retries are off by default and can duplicate external actions.
+
+For example, the synthetic event shown below maps topic `Synthetic/Detection/Person` and Data field `State` equal to `true` to a POST to `https://receiver.example/webhook` with literal JSON body `{"event":"person-detected"}`. Use the topic and fields you actually observe on your camera.
 
 ## Example uses
 
@@ -75,9 +87,13 @@ These are integration possibilities, not claims of end-to-end verification with 
 
 Actual application screens using synthetic ONVIF events and a local HTTP recorder. No personal camera or destination data is shown.
 
-![Overview with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)
+Select an image to view it at full size.
 
-[Event Explorer](docs/images/event-explorer.png) · [Rule editor with an observed event reference](docs/images/rule-editor.png)
+<p>
+<a href="docs/images/overview.png"><img src="docs/images/overview.png" width="280" alt="Overview with a subscribed synthetic camera and an accepted HTTP delivery"></a>
+<a href="docs/images/event-explorer.png"><img src="docs/images/event-explorer.png" width="280" alt="Event Explorer with synthetic camera notifications"></a>
+<a href="docs/images/rule-editor.png"><img src="docs/images/rule-editor.png" width="280" alt="Rule editor with an observed event reference and a masked HTTP destination"></a>
+</p>
 
 ## Documentation
 
@@ -87,8 +103,6 @@ Actual application screens using synthetic ONVIF events and a local HTTP recorde
 - [Data storage and permissions](docs/DATA_STORAGE.md)
 - [Security and reporting vulnerabilities](SECURITY.md)
 - [Development, tests and diagnostic probe](docs/DEVELOPMENT.md)
-
-See [browser administration](docs/BROWSER_ADMINISTRATION.md#screenshots) for screenshot provenance and safe replacement guidance.
 
 ## Compatibility and limitations
 
