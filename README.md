@@ -1,8 +1,12 @@
 # ONVIF Webhook Bridge
 
-A free, self-hosted application that turns ONVIF camera events into configurable HTTP webhooks. Connect multiple IP cameras, inspect their events, and configure forwarding rules in your browser. Run it with Docker Compose on a compatible Linux host, including a NAS with Linux container support.
+Turn IP camera detection events into HTTP webhooks.
 
-Connect camera event producers to systems that accept HTTP requests but cannot consume those ONVIF events directly. The original motivation was forwarding camera AI detection events to QNAP QVR Pro's HTTP event mechanism; the bridge is generic and has no QNAP dependency.
+A lightweight, self-hosted Docker application that monitors ONVIF camera events and forwards matching notifications to configurable HTTP endpoints.
+
+Configure cameras and event rules from a browser. No cloud account required.
+
+[![Dashboard with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)](docs/images/overview.png)
 
 ## Features
 
@@ -82,12 +86,6 @@ For example, the synthetic event shown below maps topic `Synthetic/Detection/Per
 - Send camera events to a custom application's HTTP handler using a configured GET or literal JSON POST.
 
 These are integration possibilities, not claims of end-to-end verification with those products. Automated delivery tests use an ONVIF simulator and local HTTP recorders; real destination effects remain unverified.
-
-## Screenshot
-
-The application overview with synthetic ONVIF events and a local HTTP recorder. No personal camera or destination data is shown.
-
-[![Overview with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)](docs/images/overview.png)
 
 ## Documentation
 
