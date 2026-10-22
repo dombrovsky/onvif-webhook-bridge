@@ -1,110 +1,115 @@
 # ONVIF Webhook Bridge
 
-Incremental .NET 10 NativeAOT bridge with a standalone diagnostic probe, generic normalization/history/matching, HTTP forwarding, multiple-camera supervision, SQLite configuration persistence, authenticated Minimal APIs and plain browser administration, with phase 8 Docker/Compose packaging and release workflows. Startup requires administrator setup; configuration changes commit through the store before active snapshots change. Open the root URL after administrator setup for Cameras, Events and Rules; see [browser usage](docs/BROWSER_ADMINISTRATION.md) and [phase 7 evidence](docs/BROWSER_VERIFICATION.md). See [administrator setup/reset and API contract](docs/ADMINISTRATION.md), [phase 6 verification](docs/ADMIN_VERIFICATION.md), [storage usage and permissions](docs/DATA_STORAGE.md), [persistence verification](docs/PERSISTENCE_VERIFICATION.md) and [lifecycle contracts](docs/LIFECYCLE_VERIFICATION.md).
+Turn IP camera detection events into HTTP webhooks.
 
-## Structure and build
+A lightweight, self-hosted Docker application that monitors ONVIF camera events and forwards matching notifications to configurable HTTP endpoints.
 
-```text
-OnvifWebhookBridge.slnx
-Directory.Build.props / Directory.Build.targets / .editorconfig
-Dockerfile / .dockerignore / docker-compose.yml / .env.example
-src/
-  OnvifWebhookBridge/              Application and shared ONVIF adapter
-  OnvifProbe/                      Standalone diagnostic console
-tests/
-  OnvifWebhookBridge.Tests/        xUnit unit and Testcontainers integration tests
-  OnvifWebhookBridge.NativeSmoke/  Test-only Linux NativeAOT protocol runner
-  Verify-Phase7Native.ps1          Native security/API/storage/protocol checks
-  Build-OnvifSimulator.ps1         Pinned upstream simulator image build
-  OnvifProbe.Smoke.ps1             Synthetic console regression
+Configure cameras and event rules from a browser. No cloud account required.
+
+[![Dashboard with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)](docs/images/overview.png)
+
+## Features
+
+- **Multiple cameras:** independent ONVIF PullPoint connections, lease renewal and automatic reconnection.
+- **Event Explorer:** inspect received topics, Source/Data/Key fields and retained XML, including false and unmatched notifications. Draft rules from observed events.
+- **Configurable forwarding:** exact topic and optional text/boolean field matching, occurrence or transition modes, cooldowns, GET or POST, custom headers and literal JSON bodies.
+- **Browser administration:** manage cameras and rules, check connection status, test saved HTTP actions, and inspect recent delivery results.
+- **Persistent configuration:** cameras, rules and administrator setup survive container recreation in a SQLite data volume.
+- **Self-contained deployment:** one .NET NativeAOT process serves the UI, polls cameras and delivers actions; no external database or frontend service is needed.
+- **Protected administration:** one administrator, no default credentials, bounded sessions, CSRF protection and masked secret reads. Recoverable camera and webhook secrets require private storage; see [security](SECURITY.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    Cameras[ONVIF cameras] -->|Events| Bridge[ONVIF Webhook Bridge]
+    Bridge -->|Matching HTTP requests| Endpoints[HTTP endpoints]
 ```
 
-```powershell
-dotnet build OnvifWebhookBridge.slnx
-dotnet test OnvifWebhookBridge.slnx --no-build --filter Category=Unit
+Add camera device-service URLs explicitly. The bridge discovers each camera's event service, subscribes, and keeps a bounded recent event history. Rules select which observations produce HTTP requests; a failed camera or action does not stop the other camera connections.
+
+## Quick start
+
+You need Git, Docker with Compose, and a Linux container engine on an amd64 or arm64 host. This procedure **builds locally**; it does not depend on an available registry image. See [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md) for platform verification and remaining hardware gates.
+
+```sh
+git clone https://github.com/dombrovsky/onvif-webhook-bridge.git
+cd onvif-webhook-bridge
+cp .env.example .env
 ```
 
-Docker integration tests require a running Linux Docker engine. Build the simulator once with PowerShell 7, then run the tests (a missing Docker engine/image fails the integration test):
+Until the repository is public, cloning requires authorized GitHub access.
 
-```powershell
-./tests/Build-OnvifSimulator.ps1
-dotnet test OnvifWebhookBridge.slnx --no-build
+Edit `.env`: replace `ONVIF_ADMIN_USERNAME` with your chosen administrator name. Keep the local image and loopback bind defaults.
+
+On a standard Linux Docker host, use **Bash** and `sudo` to create the default password file. Enter a unique password of at least 12 characters when prompted; input is hidden. See [password requirements](docs/ADMINISTRATION.md#initial-setup) for exact limits.
+
+```bash
+install -d -m 700 .local
+read -r -s -p 'Administrator password (at least 12 characters): ' bridge_password
+printf '\n'
+printf '%s' "$bridge_password" | sudo install -m 600 -o 1654 -g 1654 /dev/stdin .local/administrator-password
+unset bridge_password
 ```
 
-The script builds [onvifsim's upstream Dockerfile](https://github.com/mrtian2016/onvifsim/blob/8f86706c2ba768006e85b38f6bc1c760d36f1bba/packaging/docker/Dockerfile) at the pinned commit. Testcontainers starts a disposable simulator, uses random host ports, loads a generic synthetic camera scenario with fake credentials and mapped advertised addresses, subscribes, renews, triggers true/false notifications through its control API, pulls both states and unsubscribes. No physical camera or destination is contacted. Containers are disposed automatically; the image remains cached. Add `--no-cache --pull` to the script's Docker build command when intentionally refreshing the upstream base/OS packages, then rerun the tests.
+This keeps the directory private to your account and the password file owned by the container's UID/GID **1654:1654**. Its path matches `ONVIF_ADMIN_PASSWORD_PATH` in `.env`. For NAS ACLs or rootless Docker, see [password-file permissions](docs/DEPLOYMENT.md#first-start).
 
-Run `./tests/Verify-Phase7Native.ps1` for the Linux x64 NativeAOT checks through phase 7. It retains the protocol, matching, GET/POST recorder, overload/redaction and two-camera fault/recovery/cleanup regressions, and adds SQLite transactions/migrations/secret handling, actual Linux ownership/modes, backup/restore and persisted restart reconciliation to a local recorder. It also publishes/runs the production executable for offline reset, fail-closed startup and authenticated JSON, and runs bounded-session/CSRF/validation tests plus authenticated API-driven onvifsim reconciliation and recorder delivery. `-StorageOnly` runs storage and security/executable checks without onvifsim. Historical Phase2/Phase4/Phase5/Phase6 scripts delegate to this runner. It builds a test-only image from an explicit source allowlist under ignored `.local/` and removes disposable fixture containers. It accepts `-Platform linux/amd64` or `-Platform linux/arm64`; native platform runners are preferred. Local amd64 hosts can use `-Platform linux/arm64 -CrossCompile` and must label execution as emulation. Physical-device interoperability remains pending; see [phase 8 evidence](docs/DEPLOYMENT_VERIFICATION.md). See [phase 2 contracts](docs/PHASE2_VERIFICATION.md) for truncation/transition limits. Real activation/reset mappings and outage/recovery remain pending.
-
-Run `./tests/Verify-Phase7Browser.ps1 -PlaywrightModule <installed-playwright-module>` after native verification for the automated Edge walkthrough against actual native APIs, onvifsim and a local recorder. Playwright and Node are external test tools only; the application has no frontend packages or build step. See [browser evidence](docs/BROWSER_VERIFICATION.md) for prerequisites and scope.
-
-Production Docker packaging and Compose are available for Linux amd64 and arm64. See [deployment and release usage](docs/DEPLOYMENT.md) for administrator password-file setup, loopback-default ports, HTTPS proxy/backend trust, private volume ownership, backup/restore, upgrades and troubleshooting. See [phase 8 evidence and open platform/hardware gates](docs/DEPLOYMENT_VERIFICATION.md) before choosing a deployment target. ARMv7 is conditional and excluded; Linux 32-bit x86 is unsupported.
-
-Copy `.env.example` to ignored `.env`, replace its administrator/password-file placeholders locally, then run:
+Then run from the repository directory:
 
 ```sh
 docker compose config --quiet
 docker compose build
 docker compose up -d
+docker compose ps
 ```
 
-No default credentials exist. The image runs as UID/GID 1654, creates private `/data`, includes a bounded built-in health probe and uses the existing NativeAOT application. Compose adds a named volume, bridge network, read-only root, bounded tmpfs and graceful stop. Camera outages remain separate from process/storage health. No real deployment or publication is implied by local test evidence. Creating mappings, transition baselines, cooldown and duplicate effects from opt-in retries are covered in [browser usage](docs/BROWSER_ADMINISTRATION.md) and [deployment guidance](docs/DEPLOYMENT.md).
+Open [http://localhost:8080](http://localhost:8080) **on the Docker host** and sign in with the credentials you configured. The default is `127.0.0.1:8080` on the host, forwarding to port `8080` in the container. For a remote NAS, use a secure tunnel or the documented [HTTPS proxy setup](docs/DEPLOYMENT.md#https-and-trusted-certificates); changing the bind address alone does not secure remote access.
 
-CI verifies native per-platform builds and simulator/local-recorder paths without registry credentials on PRs. Trusted version tags can publish verified platform artifacts to GHCR and assemble a manifest. This implementation session does not push or publish images.
+Compose creates the persistent `bridge-data` volume at `/data`. Keep it across upgrades and back it up securely. Administrator variables initialize only a new database; changing the password file later does not change the existing login. Keep the file available for Compose and use the documented [offline reset](docs/ADMINISTRATION.md#explicit-offline-password-reset) when needed.
 
-## Diagnostic probe
+### Forward your first event
 
-A small exploratory .NET 10 console tool using SharpOnvifClient 0.11.2. It discovers the event service from a configured device-service endpoint, subscribes without topic filtering, and prints every returned notification. It does not change camera configuration or forward events anywhere.
+1. In **Cameras**, choose **Add camera**, enter its ONVIF device-service URL and credentials, and enable the connection. **Test connectivity** checks reachability; wait for subscription status separately.
+2. Open **Event Explorer**, generate a detection at the camera, and inspect the actual topic and fields. Event support depends on the camera and its existing configuration.
+3. Draft a rule from the observed topic or a Source/Data value. Review the match and set your HTTP destination, method and optional headers/JSON. New rules save **disabled**. Mark URLs containing tokens as sensitive.
+4. Use the rule's manual HTTP test and inspect its execution result. **This sends a real request**, even for a disabled rule; the camera must be enabled. A 2xx response confirms HTTP acceptance, so verify the intended effect at the destination separately.
+5. Enable the reviewed rule, generate another event, and check delivery. Use occurrence mode initially; transition mode needs a verified activation/reset cycle and stable event identity.
 
-## Run
+See [browser administration](docs/BROWSER_ADMINISTRATION.md) for matching, secrets, retries and execution details. Retries are off by default and can duplicate external actions.
 
-Install the .NET 10 SDK. From the repository root:
+For example, the synthetic event shown below maps topic `Synthetic/Detection/Person` and Data field `State` equal to `true` to a POST to `https://receiver.example/webhook` with literal JSON body `{"event":"person-detected"}`. Use the topic and fields you actually observe on your camera.
 
-```powershell
-dotnet build src/OnvifProbe/OnvifProbe.csproj
-$env:ONVIF_ENDPOINT = 'http://<camera-host>/onvif/device_service'
-# Optional: set both credentials if the device requires authentication.
-$env:ONVIF_USERNAME = '<username>'
-$env:ONVIF_PASSWORD = '<password>'
-dotnet run --project src/OnvifProbe -- --raw
-```
+## Example uses
 
-Replace the placeholders locally. For an unauthenticated device, leave both credential variables unset. No endpoint or credential is hardcoded. Command-line options override environment variables:
+- Forward detection events to QNAP QVR Pro through its HTTP event mechanism, using a destination URL configured for that system.
+- Trigger home automations that expose HTTP webhook endpoints.
+- Send camera events to a custom application's HTTP handler using a configured GET or literal JSON POST.
 
-```text
-dotnet run --project src/OnvifProbe -- --endpoint <device-service-url> --raw
-dotnet run --project src/OnvifProbe -- --help
-```
+These are integration possibilities, not claims of end-to-end verification with those products. Automated delivery tests use an ONVIF simulator and local HTTP recorders; real destination effects remain unverified.
 
-`--username` and `--password` are also supported; prefer environment variables so credentials do not appear in process arguments or shell history. Bash uses `export ONVIF_ENDPOINT='http://<camera-host>/onvif/device_service'` and corresponding credential variables. A local `Properties/launchSettings.json` can supply arguments/environment for `dotnet run`; it is ignored by Git and must remain private. Use `--no-launch-profile` before `--` to bypass it. Press **Ctrl+C** to stop; cleanup attempts to unsubscribe for up to three seconds, then disposes the clients.
+## Documentation
 
-## Output and behaviour
+- [Deployment, upgrades, backup and troubleshooting](docs/DEPLOYMENT.md)
+- [Browser configuration, Event Explorer and rules](docs/BROWSER_ADMINISTRATION.md)
+- [Administrator setup, password reset and API](docs/ADMINISTRATION.md)
+- [Data storage and permissions](docs/DATA_STORAGE.md)
+- [Security and reporting vulnerabilities](SECURITY.md)
+- [Development, tests and diagnostic probe](docs/DEVELOPMENT.md)
 
-Each event has a local receipt timestamp with milliseconds and timezone, the full topic text/dialect, and the library-exposed message tree. Camera timestamps such as `UtcTime`, property operations, Source/Data/Key fields, duplicate names, boolean text, attributes, and structured/unknown elements are printed without an assumed schema. There is no topic filter, deduplication, or suppression of false states. `--raw` additionally prints the message XML exposed by the library, not a complete original SOAP envelope or byte-for-byte network capture.
+## Compatibility and limitations
 
-Status messages report connecting, subscribing, renewing, reconnecting, and stopping. Endpoint URLs and credentials are omitted from status/error messages. Notification payloads themselves may contain private details: keep console output/captures private and sanitize before sharing. No files are written by the probe. Do not commit personal addresses, device identities, real configuration, or captures; `.local/`, `.env`, and `*.local.*` are ignored.
+- Cameras must expose a reachable ONVIF event service with PullPoint support. Manufacturer and firmware differences affect topics, fields, authentication and subscriptions; ONVIF branding alone does not establish compatibility. There is no automatic camera discovery.
+- The standalone probe received initialization events, renewed subscriptions and shut down cleanly on one real device. Full detection activation/reset, real-device outage/reboot recovery and real destination effects remain pending. See [device observations](docs/ONVIF_OBSERVATIONS.md), [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md) and [current UI verification](docs/UI_REDESIGN_VERIFICATION.md).
+- Docker targets are `linux/amd64` and `linux/arm64`. Both have native hosted CI evidence; operator NAS/hardware compatibility still needs verification. ARMv7 is excluded and Linux 32-bit x86 is unsupported.
+- Event history and delivery results are bounded and in memory. Restart clears history, sessions, transition state, cooldowns and queued work. Events missed during disconnection are not replayed; delivery is not durable or exactly once.
+- This is an event bridge. It does not stream or record video, proxy RTSP, or provide MQTT integration.
 
-The probe requests a 120-second lease and pulls up to 100 notifications with at most a 20-second long poll. It uses camera-relative lease times for renewal through the generated SubscriptionManagerClient. Version 0.11.2 does not automatically include WS-Addressing headers on that client's renewal request. A small adapter adds Action, a unique MessageID, To, and anonymous ReplyTo through the supported header hook, while preserving the library's authentication. Without MessageID, subscription managers requiring it can return ActionFailed on every renewal. On faults, expired leases, or disconnects the probe disposes the client and attempts a fresh connection/subscription after three seconds. A small delay prevents devices returning immediately from causing a busy loop. Reconnection can lose events while disconnected; this diagnostic does not provide durable delivery.
+## Contributing and support
 
-The SimpleOnvifClient convenience calls do not expose CancellationToken in this version. Cancellable waits plus client disposal bound shutdown; renewal uses the generated API's cancellation token. Subscription reference parameters are not forwarded by the convenience methods: a warning identifies devices that return them. Such devices may require a lower-level client. Unknown XML already discarded by library deserialization cannot be recovered here. Subscription/producer reference addresses are intentionally omitted because they can contain private URLs/tokens. No built-in motion helpers are used.
+Report bugs and request features through [GitHub Issues](https://github.com/dombrovsky/onvif-webhook-bridge/issues). Include the revision, architecture and sanitized reproduction steps; keep credentials, device identities, private addresses and event payloads out of reports. Use the [security policy](SECURITY.md) for vulnerabilities.
 
-## Verification and local-network testing
+For contributions, start with the [developer guide](docs/DEVELOPMENT.md) and [repository instructions](AGENTS.md). Keep changes focused and discuss substantial additions in an issue first. The project is free and open source under the [MIT License](LICENSE).
 
-Source/API review used the [package's upstream revision](https://github.com/jimm98y/SharpOnvif/tree/a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71), including SimpleOnvifClient, the console example, and generated event contracts. The `net10.0` package was restored and the application built with .NET SDK 10.0.400 with zero warnings/errors. The user also reports successful NativeAOT and trimming verification with the library; the exact target and publish/runtime checks were not supplied. Linux/container and per-architecture verification from the longer product plan remain separate checks.
+## Optional sponsorship
 
-Verification also passed against a simulated SOAP service: six notifications (including repeated true and false states), duplicate fields, structured/unknown XML, unique WS-Addressing renewal headers and resubscription after a fault. Help and invalid configuration checks passed. A console Ctrl+C check during connection/retry reached the `Stopped` status. Run the synthetic regression check from the repository root with PowerShell 7 after a Debug build:
-
-```powershell
-./tests/OnvifProbe.Smoke.ps1
-```
-
-The test uses a synthetic localhost SOAP listener and bypasses launch profiles; it does not access a camera. It force-terminates its child after assertions, so its result is not a graceful shutdown check.
-
-An initial reachability check failed. A later real-device run using private local configuration successfully connected and received initialization notifications. The old renewal fault was reproduced and traced to missing WS-Addressing headers. With the fix, the probe completed at least 25 successful renewals over more than 40 minutes without recurrence, and Ctrl+C successfully unsubscribed and stopped it. Evidence is recorded in [the observation record](docs/ONVIF_OBSERVATIONS.md). This does not establish every event type's activation/reset lifecycle, reboot recovery, or interoperability with other devices. Run the probe on a machine on the same reachable LAN as the device:
-
-1. Set the actual device-service URL and optional credentials locally, then run with `--raw`.
-2. Check that service discovery and PullPoint subscription succeed. If discovery fails, verify endpoint, credentials, firewall, and device clock; authentication can depend on clock accuracy. Exception categories are printed without potentially sensitive server messages.
-3. Generate each available detection/event type, then let it clear. Observe the actual topic, field names, values, camera timestamp and property operation. Repeat and confirm repeated notifications and false/reset states remain visible. A device may not emit a reset; record what actually occurs.
-4. Leave it running across several lease periods and check renewal. With a coordinated network interruption, check reconnect/resubscribe. Do not modify camera settings to perform these tests.
-5. Press Ctrl+C and check that shutdown completes. Events observed in another client are not proof that this tool is interoperable; compare behaviour directly.
-
-The probe remains a small standalone console application. It shares only the renewal-adapter source with the application, without depending on the web host. Existing ignored launch profiles in the old `tools` directory are not moved; recreate a private profile under `src/OnvifProbe/Properties/` if needed. The planning documents describe the eventual product separately.
+If you find the project useful, you can [sponsor its maintainer](https://github.com/sponsors/dombrovsky). Sponsorship is entirely optional; all features are available without payment.

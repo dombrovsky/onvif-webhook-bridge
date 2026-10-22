@@ -20,6 +20,16 @@ On phones, View event / Hide event controls an inline reference above the form. 
 
 General, WHEN and THEN sections expose the common settings. Advanced matching & delivery holds Text/Boolean, Occurrence/Transition, cooldown, retries, header rows and literal JSON body; it opens automatically when relevant existing settings are active. Text is ordinal/case-sensitive; Boolean accepts true/1 and false/0 only. Transition requires a field condition and a known nonmatching-to-matching change; first observations/Initialized establish baseline and Deleted clears state. Retry defaults to zero and can duplicate side effects. Verify real activation/reset and stable identity privately before enabling a hardware transition mapping.
 
+## Screenshots
+
+- [Overview](images/overview.png): subscribed camera count, recent events and accepted HTTP execution.
+- [Event Explorer](images/event-explorer.png): synthetic observations with exact topics and boolean values.
+- [Rule editor](images/rule-editor.png): WHEN/THEN configuration alongside a retained event reference; the saved destination is masked.
+
+Captured on 2026-10-21 from the Linux amd64 production NativeAOT image for application revision `592e884` (merged as `fa0fad6`). Its embedded HTML, CSS and JavaScript were compared with the current source before capture. Actual onvifsim notifications and a disposable HTTP recorder populated the unmodified UI; no mocked API responses or development asset substitution was used. Recorder HTTP 204 acceptance is separate from real destination interoperability.
+
+Screenshots were visually reviewed and visible text was checked for endpoint addresses and fixture passwords. They contain only synthetic camera/event data. When replacing them, use the same safeguards: exclude real endpoints, credentials, tokens, private payloads and device identities. Keep unsanitized test screenshots in ignored local storage.
+
 ## URLs and secrets
 
 New browser rules default to a visible URL. Sensitive URL marks it write-only on future API reads, including after reload. The lock beside the URL controls its saved sensitivity; there is no separate show/hide button. Existing sensitive URLs show a fixed mask in an editable field. Sensitive-to-visible changes require re-entry; a stored secret cannot be revealed. Visible-to-sensitive changes can preserve the destination. Visible URLs are available only to authenticated administrators and should contain no tokens. Existing databases and API callers that omit classification retain write-only URLs.
