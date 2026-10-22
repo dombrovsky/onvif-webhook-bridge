@@ -134,8 +134,11 @@ def export_image(selected, revision, arch):
     run("docker", "save", "onvif-webhook-bridge:verify", "-o", str(archive))
     config_digest, config = saved_config(archive)
     # With Docker's containerd image store, .Id can be an index rather than a config ID.
-    require(config["config"] == info["Config"] and config["rootfs"]["diff_ids"] == info["RootFS"]["Layers"],
-            "Saved image configuration/layers differ from the tested Docker image.")
+    require(config["rootfs"]["diff_ids"] == info["RootFS"]["Layers"], "Saved image layers differ from the tested Docker image.")
+    # Classic Docker's config ID proves identity directly; its inspection can add default
+    # fields absent from the saved config. The containerd store exposes an index ID instead.
+    require(config_digest == info["Id"] or config["config"] == info["Config"],
+            "Saved image configuration differs from the tested Docker image.")
     labels(config, selected, revision, arch)
     write_json(f"image-{arch}.json", {"version": selected, "revision": revision, "architecture": arch,
                                       "binaryVersion": binary, "dockerImageId": info["Id"], "configDigest": config_digest,

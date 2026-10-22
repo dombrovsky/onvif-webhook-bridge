@@ -101,13 +101,22 @@ class ReleaseTests(unittest.TestCase):
                         header = tarfile.TarInfo(name)
                         header.size = len(value)
                         archive.addfile(header, io.BytesIO(value))
-                info = {"Architecture": "amd64", "Os": "linux", "Config": config["config"],
-                        "RootFS": {"Layers": config["rootfs"]["diff_ids"]}, "Id": "sha256:" + "e" * 64}
-                with patch.object(release, "source_version", return_value=VERSION), patch.object(release, "run", side_effect=[json.dumps([info]).encode(), VERSION.encode(), b""]):
-                    release.export_image(VERSION, SHA, "amd64")
-                evidence = json.loads(Path("image-amd64.json").read_text())
-                self.assertEqual(release.digest(content), evidence["configDigest"])
-                self.assertNotEqual(evidence["dockerImageId"], evidence["configDigest"])
+                for classic in (False, True):
+                    inspected = dict(config["config"])
+                    if classic:
+                        # The classic daemon synthesizes defaults in inspect, without changing the config blob.
+                        inspected.update(AttachStdin=False, AttachStdout=False, AttachStderr=False, Tty=False)
+                    info = {"Architecture": "amd64", "Os": "linux", "Config": inspected,
+                            "RootFS": {"Layers": config["rootfs"]["diff_ids"]},
+                            "Id": release.digest(content) if classic else "sha256:" + "e" * 64}
+                    with patch.object(release, "source_version", return_value=VERSION), patch.object(release, "run", side_effect=[json.dumps([info]).encode(), VERSION.encode(), b""]):
+                        release.export_image(VERSION, SHA, "amd64")
+                    evidence = json.loads(Path("image-amd64.json").read_text())
+                    self.assertEqual(release.digest(content), evidence["configDigest"])
+                    self.assertEqual(classic, evidence["dockerImageId"] == evidence["configDigest"])
+                    info["RootFS"]["Layers"] = ["sha256:" + "f" * 64]
+                    with patch.object(release, "source_version", return_value=VERSION), patch.object(release, "run", side_effect=[json.dumps([info]).encode(), VERSION.encode(), b""]), self.assertRaisesRegex(ValueError, "Saved image layers"):
+                        release.export_image(VERSION, SHA, "amd64")
                 self.assertIn("Healthcheck", release.saved_config("image-amd64.tar")[1]["config"])
             finally:
                 os.chdir(previous)

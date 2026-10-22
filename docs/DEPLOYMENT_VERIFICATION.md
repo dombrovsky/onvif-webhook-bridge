@@ -145,6 +145,10 @@ Local verification on the implementation working tree:
 - Changed-file secret scan with previously checksum-verified Gitleaks 8.30.1 passed with zero findings. This is a focused working-tree check, not a new full-history privacy audit.
 - All 55 relative links/anchors in the README, deployment guide and both planning documents passed; diff whitespace and the changed-file scope/privacy review passed.
 
+The initial hosted [Verify run](https://github.com/dombrovsky/onvif-webhook-bridge/actions/runs/39703026110) passed native ARM64 tests, NativeAOT integration, the full 600-second two-camera delivery soak, Compose and TLS, then rejected image export because classic Docker inspection adds default fields absent from the saved config. Export now accepts the original config digest as direct identity proof when the daemon exposes it; the containerd index-ID case retains strict settings comparison, and both stores require matching rootfs diff IDs. The regression exercises both stores and rejects changed layers. This is an exporter correction, not removal of an integration gate. Current hosted results are recorded in the PR checks; the initial run is not claimed successful.
+
+Additional offline checks passed: MSBuild property evaluation for all five requested versions (`0.1.0-rc.1`, `0.1.0-rc.2`, `0.1.0`, `0.2.0`, `1.0.0`) and a real Skopeo `--all --preserve-digests` copy into a directory transport, preserving the exact two-platform index without registry writes.
+
 Source/build provenance for local images identifies the checked-out base revision plus uncommitted implementation changes; local results do not claim a released/tagged artifact. The exact selected source revision and archive/config/index digests are recorded by hosted release CI for a real release.
 
 At inspection, GitHub reported `main` **unprotected**. No settings were changed; branch protection, Docker Hub setup/secrets/namespace and the optional release-environment approval must be configured by the maintainer before publishing. See [the release procedure](DEPLOYMENT.md#publishing-a-release).
