@@ -83,17 +83,11 @@ For example, the synthetic event shown below maps topic `Synthetic/Detection/Per
 
 These are integration possibilities, not claims of end-to-end verification with those products. Automated delivery tests use an ONVIF simulator and local HTTP recorders; real destination effects remain unverified.
 
-## Screenshots
+## Screenshot
 
-Actual application screens using synthetic ONVIF events and a local HTTP recorder. No personal camera or destination data is shown.
+The application overview with synthetic ONVIF events and a local HTTP recorder. No personal camera or destination data is shown.
 
-Select an image to view it at full size.
-
-<p>
-<a href="docs/images/overview.png"><img src="docs/images/overview.png" width="280" alt="Overview with a subscribed synthetic camera and an accepted HTTP delivery"></a>
-<a href="docs/images/event-explorer.png"><img src="docs/images/event-explorer.png" width="280" alt="Event Explorer with synthetic camera notifications"></a>
-<a href="docs/images/rule-editor.png"><img src="docs/images/rule-editor.png" width="280" alt="Rule editor with an observed event reference and a masked HTTP destination"></a>
-</p>
+[![Overview with a subscribed synthetic camera and an accepted HTTP delivery](docs/images/overview.png)](docs/images/overview.png)
 
 ## Documentation
 
