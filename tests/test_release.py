@@ -1,5 +1,6 @@
 """Offline release scenarios: all external commands are faked; no registry writes."""
 import importlib.util
+from contextlib import redirect_stdout
 import io
 import json
 import os
@@ -42,6 +43,21 @@ class ReleaseTests(unittest.TestCase):
             release.absent_image("synthetic:1.0.0")
         with patch.object(release, "run", return_value=b"{}"), self.assertRaises(ValueError):
             release.absent_image("synthetic:1.0.0")
+
+    def test_release_version_comes_from_selected_commit_without_version_input(self):
+        for suffix, expected in (("rc.2", "0.2.0-rc.2"), ("", "0.2.0")):
+            xml = f"<Project><VersionPrefix>0.2.0</VersionPrefix><VersionSuffix>{suffix}</VersionSuffix></Project>".encode()
+            output = io.StringIO()
+            with patch.object(release.sys, "argv", ["release.py", "version", "--revision", SHA]), patch.object(release, "run", return_value=xml) as command, redirect_stdout(output):
+                release.main()
+            self.assertEqual(expected, output.getvalue().strip())
+            command.assert_called_once_with("git", "show", f"{SHA}:Directory.Build.props")
+
+    def test_version_resolution_rejects_non_commit_inputs_before_reading_source(self):
+        for revision in ("main", "refs/heads/main", "a" * 39, SHA + ":other-file", ""):
+            with patch.object(release, "run") as command, self.assertRaises(ValueError):
+                release.revision_version(revision)
+            command.assert_not_called()
 
     def test_main_revision_protection_version_and_tag_guards(self):
         def api(path):

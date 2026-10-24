@@ -54,6 +54,11 @@ def run(*args, data=None):
     return result.stdout
 
 
+def revision_version(revision):
+    require(re.fullmatch(r"[0-9a-f]{40}", revision) is not None, "Select the full 40-character commit SHA from protected main.")
+    return source_version(run("git", "show", f"{revision}:Directory.Build.props"))
+
+
 def api(path, payload=None, method=None):
     args = ["gh", "api", f"repos/{REPOSITORY}/{path}"]
     if method:
@@ -98,7 +103,7 @@ def validate_source(selected, revision):
         run("git", "merge-base", "--is-ancestor", revision, "origin/main")
     except RuntimeError as error:
         raise ValueError("Selected revision must exist on fetched protected main. Copy its full commit SHA from GitHub.") from error
-    actual = source_version(run("git", "show", f"{revision}:Directory.Build.props"))
+    actual = revision_version(revision)
     require(actual == selected, f"Selected {selected}, but source defines {actual}. Merge a version-bump PR first.")
     tag = "v" + selected
     require(not any(ref["ref"] == "refs/tags/" + tag for ref in api("git/matching-refs/tags/" + tag)),
@@ -262,7 +267,7 @@ def main():
     parser.add_argument("--directory", default="release-oci")
     args = parser.parse_args()
     if args.command == "version":
-        actual = source_version()
+        actual = revision_version(args.revision) if args.revision else source_version()
         require(not args.selected or actual == args.selected, f"Source version {actual} differs from requested {args.selected}.")
         print(actual)
     elif args.command == "preflight":

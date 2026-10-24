@@ -134,9 +134,9 @@ This audit cannot certify inaccessible remote recovery objects, forks, third-par
 
 `Directory.Build.props` is the only version definition: `VersionPrefix` is the three-number version and `VersionSuffix` is `rc.1`, `rc.2`, or empty for stable. `Version` and `InformationalVersion` combine them; `AssemblyVersion` and `FileVersion` remain numeric (`0.1.0.0` for all 0.1.0 candidates). The SDK's existing deterministic/CI and built-in SourceLink settings remain enabled; no additional SourceLink package is needed. The SDK may append the commit to informational metadata. The executable's exact `--version` command and authenticated session response remove that provenance suffix; Overview displays `v` plus that compiled version. `--version` needs neither administrator credentials nor storage and does not start the server.
 
-Versions use SemVer without a leading `v`. Numeric prerelease identifiers cannot have leading zeroes. Build metadata (`+...`) is deliberately excluded from release inputs because Docker tags cannot represent it; provenance uses the separate revision label and informational metadata. Core components must fit numeric .NET assembly metadata (0..65534), and image tags are limited to 128 characters. Git tags and GitHub Release titles add `v`; image tags and product versions do not.
+Versions use SemVer without a leading `v`. Numeric prerelease identifiers cannot have leading zeroes. Build metadata (`+...`) is deliberately excluded from source release versions because Docker tags cannot represent it; provenance uses the separate revision label and informational metadata. Core components must fit numeric .NET assembly metadata (0..65534), and image tags are limited to 128 characters. Git tags and GitHub Release titles add `v`; image tags and product versions do not.
 
-Version changes go through a small reviewed PR. This is slightly more deliberate than typing an arbitrary version into Actions: a checkout of the tagged revision always builds the intended version without release-only MSBuild overrides. Only the prefix/suffix fields need editing. Do not change version literals in fixtures: they are synthetic test scenarios.
+Version changes go through a small reviewed PR. The release workflow reads the prefix/suffix from `Directory.Build.props` at the selected commit; there is no version input in Actions. That derived version is passed unchanged to verification and publication and checked against the source again before registry writes. A checkout of the tagged revision always builds the intended version without release-only MSBuild overrides. Only the prefix/suffix fields need editing. Do not change version literals in fixtures: they are synthetic test scenarios.
 
 ### One-time maintainer setup
 
@@ -154,11 +154,11 @@ Actions are official actions pinned to existing reviewed commit SHAs. The publis
 After merging this implementation and completing setup:
 
 1. Merge the desired version-bump PR into `main`. Copy the **full 40-character SHA** of the main commit you intend to release from GitHub's commit page. The selected commit must be an ancestor of current protected main and contain this release implementation.
-2. Open **Actions → Release → Run workflow**. Leave the branch selector on **main**. Enter the version **without `v`** and the copied revision SHA, then run it. The workflow refuses feature-branch dispatches, non-main revisions, source/version mismatches, existing tags/releases/drafts, and existing version tags in either registry. Authentication/network errors do not count as an available version.
+2. Open **Actions → Release → Run workflow**. Leave the branch selector on **main**. Enter the copied revision SHA, then run it. The workflow reads the version from that revision's `Directory.Build.props` and shows it in the run summary. The workflow refuses feature-branch dispatches, non-main revisions, source/version mismatches, existing tags/releases/drafts, and existing version tags in either registry. Authentication/network errors do not count as an available version.
 3. Wait for the existing full native AMD64 and ARM64 suite. If configured, approve the `release` environment only after reviewing those checks.
 4. A successful run publishes both multi-architecture image tags, verifies their exact digests/configurations, moves stable aliases when appropriate, and finalizes the GitHub Release. Follow its installation links and digest references. Do not manually create a release tag first.
 
-| Intended release | VersionPrefix | VersionSuffix | Actions version | GitHub tag/type | Image tags in both registries |
+| Intended release | VersionPrefix | VersionSuffix | Automatically resolved version | GitHub tag/type | Image tags in both registries |
 | --- | --- | --- | --- | --- | --- |
 | First candidate | `0.1.0` | `rc.1` (already set) | `0.1.0-rc.1` | `v0.1.0-rc.1`, prerelease | `0.1.0-rc.1` only |
 | Next candidate | `0.1.0` | `rc.2` | `0.1.0-rc.2` | `v0.1.0-rc.2`, prerelease | `0.1.0-rc.2` only |
