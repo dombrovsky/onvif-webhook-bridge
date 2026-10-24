@@ -62,6 +62,7 @@ namespace OnvifWebhookBridge.Tests.Web
             var cookie = response.Headers.GetValues("Set-Cookie").Single();
             Check(cookie.Contains("httponly", StringComparison.OrdinalIgnoreCase) && cookie.Contains("samesite=strict", StringComparison.OrdinalIgnoreCase) && cookie.Contains("path=/", StringComparison.OrdinalIgnoreCase), "CookieProtections");
             var session = await response.Content.ReadFromJsonAsync(JsonContext.Default.SessionView) ?? throw new InvalidOperationException();
+            Check(session.Version == ApplicationVersion.Current, "AuthenticatedCompiledVersion");
             return (cookie.Split(';')[0], session.CsrfToken);
         }
         public static async Task Verify(CancellationToken token)

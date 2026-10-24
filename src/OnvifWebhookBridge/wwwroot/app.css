@@ -26,6 +26,7 @@ article { border: 1px solid var(--line); padding: 20px; margin: 14px 0; border-r
 article > p { color: var(--muted); font-size: 13px; }
 .rule-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
 .rule-flow p { background: #0d1824; border: 1px solid var(--line); padding: 14px; border-radius: 7px; margin: 0; }
+.app-version { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin: 16px 0 24px; }
 .metrics article { margin: 0; }
 .metrics strong { color: var(--accent); font-size: 32px; line-height: 1.2; }

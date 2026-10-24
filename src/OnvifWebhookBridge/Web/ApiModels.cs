@@ -5,7 +5,10 @@ namespace OnvifWebhookBridge.Web
     using OnvifWebhookBridge.Rules;
 
     public sealed record LoginRequest(string Username, string Password);
-    public sealed record SessionView(string CsrfToken, DateTimeOffset Expires);
+    public sealed record SessionView(string CsrfToken, DateTimeOffset Expires)
+    {
+        public string Version => ApplicationVersion.Current;
+    }
     public sealed record ApiError(string Code, string Message);
     public sealed record RevisionView(long Revision);
     public sealed record RevisionRequest(long Revision);

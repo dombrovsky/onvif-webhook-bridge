@@ -89,6 +89,10 @@ These are integration possibilities, not claims of end-to-end verification with 
 
 ## Documentation
 
+Releases are planned for `linux/amd64` and `linux/arm64` at `ghcr.io/dombrovsky/onvif-webhook-bridge` and a maintainer-configured Docker Hub namespace. The first intended version is `0.1.0-rc.1`; this document does not claim it has been published. After a release is available, use its immutable version tag (without `v`) or digest. Prereleases never update `latest`; stable releases do. The Overview page shows the running executable's version.
+
+To install a published version, set `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` in `.env`, then run `docker compose pull` and `docker compose up -d --no-build`. Keep the existing data volume and password-file settings. See [release setup and upgrades](docs/DEPLOYMENT.md#publishing-a-release) for registry access, version selection and maintainer instructions.
+
 - [Deployment, upgrades, backup and troubleshooting](docs/DEPLOYMENT.md)
 - [Browser configuration, Event Explorer and rules](docs/BROWSER_ADMINISTRATION.md)
 - [Administrator setup, password reset and API](docs/ADMINISTRATION.md)

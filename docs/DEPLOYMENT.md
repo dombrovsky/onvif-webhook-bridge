@@ -80,7 +80,7 @@ Baseline images target linux/amd64 and linux/arm64. Local arm64 execution is emu
 
 Hosted native amd64/ARM64 verification passed for the merged browser revision `fa0fad6` on 2026-10-21; see [current release readiness](#public-release-readiness). Historical results and [remaining hardware/host/destination gates](DEPLOYMENT_VERIFICATION.md#remaining-gates-and-concrete-handoff) retain their original scope. Hosted CI does not establish operator-host interoperability or authorize publication.
 
-`ci.yml` uses native amd64/arm64 runners for full JIT tests, actual onvifsim, NativeAOT execution and production deployment tests. PRs need no registry credentials and have contents-read permissions only. `images.yml` runs that gate for version tags, then loads the verified platform artifacts, pushes per-platform tags and assembles the version manifest. Runs for the same tag are serialized without cancelling an active run, so concurrent publishers cannot mix the shared platform tags during manifest assembly. Only those publishing jobs receive packages-write permission. Restrict release tag creation, updates and deletion using repository rules; treat released tags as immutable and do not publish from untrusted PR code. No mutable latest tag is created. Registry publication is intentionally not exercised during local development. See [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency); hosted serialization/publication remains a separate verification gate.
+`ci.yml` uses native amd64/arm64 runners for full JIT tests, actual onvifsim, NativeAOT execution and production deployment tests. PRs need no registry credentials and have contents-read permissions only. The manually dispatched `Release` workflow in `images.yml` reuses that entire gate for the selected revision, then publishes its tested artifacts. Release runs share one concurrency group without cancellation; GitHub may replace an older pending run with a newer pending run, so avoid queuing several releases. Only the final publishing job receives contents-write and packages-write permission. See [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency). Hosted publication remains a separate verification gate.
 
 Dependencies retain their existing exact package pins; SDK/runtime manifest digests and Dockerfile frontend are pinned, as are Actions commit SHAs with reviewed tag comments. OS apt security packages are resolved at build time, so builds are not byte reproducible. To upgrade, inspect official manifests/source/release notes, update pins intentionally, rerun all targets including SQLite/TLS/auth/browser/simulator paths and inspect the resulting manifest before releasing. Native platform builds and manifest assembly follow [Docker's multi-platform guidance](https://docs.docker.com/build/ci/github-actions/multi-platform/); see [NativeAOT cross-compilation constraints](https://learn.microsoft.com/dotnet/core/deploying/native-aot/cross-compile). Do not broaden platform claims based on available base images alone.
 
@@ -106,7 +106,7 @@ For local ARM64 emulation on an amd64 builder, run the native fixture with `-Pla
 
 Documentation review on 2026-10-21 confirmed that the merged browser implementation at `fa0fad63c635c8257551f023e00dc2fdb47051e5` passed the hosted [Verify run 39364042748](https://github.com/dombrovsky/onvif-webhook-bridge/actions/runs/39364042748). This supersedes the older hosted-verification gap above for that revision; historical verification records retain their original dates and scope. It does not establish real-device or operator-host interoperability.
 
-No GitHub releases were listed at review time. Registry inventory could not be verified with the available package permissions, so the README uses a local build and makes no public image availability claim. The existing trusted `v*` tag workflow targets `ghcr.io/dombrovsky/onvif-webhook-bridge:<version-tag>` with amd64/arm64 platform tags and a combined version manifest; it does not publish `latest`. Docker Hub is a possible future target and has no publishing configuration here.
+No GitHub releases were listed at that review. Registry inventory could not be verified with the available package permissions, so the quick start uses a local build and makes no public image availability claim. The release implementation below replaces the former tag-triggered GHCR workflow with manual, version-checked publication to both registries. Implementing this workflow does not publish artifacts or change repository/package visibility.
 
 Before offering a public release:
 
@@ -127,3 +127,96 @@ Gitleaks 8.30.1, downloaded from its official release and checked against its pu
 The final 119-file tracked snapshot, including the screenshot/documentation follow-up, passed a separate Gitleaks scan with zero findings; relative links/anchors and diff whitespace were also checked before commit. The three screenshots show the unmodified current production UI with actual simulator events and successful delivery to a local HTTP recorder; assets, visible content and image metadata were checked. This is focused synthetic screenshot verification, not a repeat of the full integration suite or a hardware/destination interoperability claim.
 
 This audit cannot certify inaccessible remote recovery objects, forks, third-party clones, caches, historical external logs or secrets a scanner cannot recognize. Repeat it for new changes before public release. No history rewrite, recovery deletion, key rotation or publication was performed.
+
+## Publishing a release
+
+### Version source and workflow
+
+`Directory.Build.props` is the only version definition: `VersionPrefix` is the three-number version and `VersionSuffix` is `rc.1`, `rc.2`, or empty for stable. `Version` and `InformationalVersion` combine them; `AssemblyVersion` and `FileVersion` remain numeric (`0.1.0.0` for all 0.1.0 candidates). The SDK's existing deterministic/CI and built-in SourceLink settings remain enabled; no additional SourceLink package is needed. The SDK may append the commit to informational metadata. The executable's exact `--version` command and authenticated session response remove that provenance suffix; Overview displays `v` plus that compiled version. `--version` needs neither administrator credentials nor storage and does not start the server.
+
+Versions use SemVer without a leading `v`. Numeric prerelease identifiers cannot have leading zeroes. Build metadata (`+...`) is deliberately excluded from source release versions because Docker tags cannot represent it; provenance uses the separate revision label and informational metadata. Core components must fit numeric .NET assembly metadata (0..65534), and image tags are limited to 128 characters. Git tags and GitHub Release titles add `v`; image tags and product versions do not.
+
+Version changes go through a small reviewed PR. The release workflow reads the prefix/suffix from `Directory.Build.props` at the selected commit; there is no version input in Actions. That derived version is passed unchanged to verification and publication and checked against the source again before registry writes. A checkout of the tagged revision always builds the intended version without release-only MSBuild overrides. Only the prefix/suffix fields need editing. Do not change version literals in fixtures: they are synthetic test scenarios.
+
+### One-time maintainer setup
+
+1. Protect `main` with a branch rule/ruleset requiring reviewed PRs and the existing native verification checks. The workflow rejects an unprotected main branch. Allow native `ubuntu-24.04` and `ubuntu-24.04-arm` runners.
+2. Configure tag rules for `v*` that prevent updates and deletion. Allow the workflow to **create** tags, without permitting force updates. Enable GitHub immutable releases where available. Avoid other publishers that can race this workflow or mutate its version tags.
+3. Create a Docker Hub repository named `onvif-webhook-bridge` in the desired namespace. Choose visibility deliberately; the workflow never changes it. Set repository Actions variable **`DOCKERHUB_NAMESPACE`** to that user/organization namespace. The account used for authentication may differ from the organization namespace.
+4. Set repository Actions secrets **`DOCKERHUB_USERNAME`** and **`DOCKERHUB_TOKEN`**. Use a Docker Hub access token with read/write access to this repository only where supported, without delete permission. The read-only preflight job needs these secrets too, so do not store them solely in the release environment. Enable immutable version tags in Docker Hub where available, excluding `latest`.
+5. Allow `GITHUB_TOKEN` to read contents for verification, and write contents/packages in the publisher. No PAT is required. If a GHCR package already exists, link it to this repository and grant this repository's Actions access. Private packages/images require authorized pulls; do not make the repository or package public as a side effect of setup.
+6. Create a GitHub environment named **`release`**, limited to `main`. Optionally require a reviewer approval (subject to the repository's GitHub plan). Approval occurs after the full verification gate and before publication. Do not add camera/destination credentials to release jobs. The publisher's `contents: write` permission is needed to create the exact-commit tag and draft/final Release; `packages: write` is used for GHCR.
+
+Actions are official actions pinned to existing reviewed commit SHAs. The publisher installs the distribution's Skopeo package to copy an OCI layout without rebuilding. Authentication comes from the login actions' ephemeral Docker configuration; credentials are never command arguments or release assets. Login post-steps remove that configuration.
+
+### GitHub UI procedure
+
+After merging this implementation and completing setup:
+
+1. Merge the desired version-bump PR into `main`. Copy the **full 40-character SHA** of the main commit you intend to release from GitHub's commit page. The selected commit must be an ancestor of current protected main and contain this release implementation.
+2. Open **Actions → Release → Run workflow**. Leave the branch selector on **main**. Enter the copied revision SHA, then run it. The workflow reads the version from that revision's `Directory.Build.props` and shows it in the run summary. The workflow refuses feature-branch dispatches, non-main revisions, source/version mismatches, existing tags/releases/drafts, and existing version tags in either registry. Authentication/network errors do not count as an available version.
+3. Wait for the existing full native AMD64 and ARM64 suite. If configured, approve the `release` environment only after reviewing those checks.
+4. A successful run publishes both multi-architecture image tags, verifies their exact digests/configurations, moves stable aliases when appropriate, and finalizes the GitHub Release. Follow its installation links and digest references. Do not manually create a release tag first.
+
+| Intended release | VersionPrefix | VersionSuffix | Automatically resolved version | GitHub tag/type | Image tags in both registries |
+| --- | --- | --- | --- | --- | --- |
+| First candidate | `0.1.0` | `rc.1` (already set) | `0.1.0-rc.1` | `v0.1.0-rc.1`, prerelease | `0.1.0-rc.1` only |
+| Next candidate | `0.1.0` | `rc.2` | `0.1.0-rc.2` | `v0.1.0-rc.2`, prerelease | `0.1.0-rc.2` only |
+| Stable | `0.1.0` | empty | `0.1.0` | `v0.1.0`, stable | `0.1.0`, then `latest` |
+
+For `0.2.0` or `1.0.0`, bump the prefix and leave the suffix empty. Each row uses the SHA of its own merged version commit. The release workflow creates no automatic version-bump commit or PR. Use the normal main-branch CI before release; the release also repeats that same reusable gate with the chosen immutable SHA and source version.
+
+### Images, installation and upgrades
+
+Both registries receive the same tested content and multi-architecture index:
+
+- `ghcr.io/dombrovsky/onvif-webhook-bridge:<version>`
+- `<configured-namespace>/onvif-webhook-bridge:<version>` on Docker Hub
+
+Runnable architectures are exactly `linux/amd64` and `linux/arm64`. There are no public platform-specific moving aliases or minor/major aliases. Prereleases never touch `latest` or GitHub's latest stable designation. Stable releases update `latest` in both registries only after both immutable version manifests pass verification. Prefer explicit version tags or the index digest in the GitHub Release over `latest` for controlled upgrades. This documentation does not claim any images/releases already exist.
+
+After a version is published, authenticate if its registry visibility requires it, and set the chosen image in `.env`, for example:
+
+```sh
+ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1
+```
+
+With the existing password-file and persistent-volume settings intact:
+
+```sh
+docker compose pull
+docker compose up -d --no-build
+docker compose ps
+```
+
+Before upgrading, stop and take a consistent private data backup as described above, then change only the pinned image and recreate using the same Compose project/volume. Never run `docker compose down --volumes` to upgrade. Login sessions expire on restart; configuration remains. A schema rollback may require the corresponding backup.
+
+For a local image with release-style OCI labels, supply the source version and revision explicitly (ordinary local builds remain supported):
+
+```sh
+docker build --build-arg VERSION=0.1.0-rc.1 --build-arg REVISION="$(git rev-parse HEAD)" -t onvif-webhook-bridge:local .
+docker run --rm --network none onvif-webhook-bridge:local --version
+```
+
+`VERSION` is checked against MSBuild's source value before publishing the binary, not used to override it. Local builds without these optional arguments still have a meaningful compiled/UI version, with empty version/revision OCI labels. Release CI always supplies and validates both labels.
+
+### Artifact verification and deliberate limits
+
+The reusable CI gate retains the existing simulator, tests, NativeAOT smoke, browser, Compose, TLS, deployment and soak checks on native runners. Its checkout is the selected SHA. Before export on each runner, the final production image must report the expected compiled version using `--version` without network, writable root, capabilities or administrator setup. Its architecture and OCI version/source/exact revision/MIT license labels must match. CI records the tested Docker config ID, archive SHA-256, binary version and commit alongside each saved image.
+
+The publisher downloads only those artifacts from the **same workflow run**. It checks archive hashes and evidence, converts them once into a local OCI layout, checks the original tested config digests, validates labels again, and assembles exactly two runnable platform descriptors. Docker schema-2 platform configs are retained so conversion cannot strip the tested Docker health check. Skopeo copies that same layout to both registries using `--all --preserve-digests`; no application/image rebuild happens after tests. It reads back each registry's index and platform manifests, checks their SHA-256 digests and labels against the local evidence, and checks the exact release tag target before finalization. Generated notes include pinned image digests and setup links. The attached `release.json` records source, index/platform digests and tested-artifact hashes. Workflow evidence is retained for 90 days; tested image archives for 7 days.
+
+A draft Release is created after verification and version reservation, before registry writes. It becomes public as a successful release only after both registries (and stable aliases, if any) pass verification. The workflow checks the final prerelease/draft state. There is no atomic transaction across GitHub and two registries: an intermediate failure is explicitly incomplete, leaves its draft unpublished, and may leave one registry/tag or one stable alias updated. See recovery below.
+
+Standalone binary downloads are deferred: Docker remains the supported runtime contract, including OS dependencies, permissions and TLS assets. A bare NativeAOT executable does not carry that contract. Adding separate archive/runtime-support verification would add maintenance beyond this release path. No second binary is rebuilt for release assets. SBOMs, vulnerability scanners, Gitleaks in hosted release CI and attestations are also deferred; adding them later should include reviewed tool pins, base-image severity/suppression policy and explicit verification rather than unreliable default release blockers. Local secret review remains part of the implementation handoff.
+
+### Recovering a failed release
+
+Inspect the first failed step, the workflow summary, preserved `release-evidence`, the GitHub tag/draft, and **both registries**. A failed workflow is not a successful release even if one version tag is visible in a registry. Do not advertise a draft or manually finalize it after a failed verification.
+
+- **Before tag reservation:** after fixing setup/transient errors, rerun using the same version/revision if no tag, draft, or registry version exists. Verification is rerun; expired CI artifacts cannot be silently substituted.
+- **After tag reservation or any publication:** the version is consumed. Keep its tag/draft/evidence for diagnosis; never move/recreate the tag, overwrite assets/images, or use a rerun to repair it. Fix the problem through a PR, choose a new unused version (for example `0.1.0-rc.2` after a failed `rc.1`, or the next patch after a failed stable version), then dispatch that revision. Any existing tag, draft, or version image causes the preflight to reject reuse, including a same-commit retry.
+- **Stable alias failure:** versioned images may both be valid while only one `latest` moved. Treat the release as incomplete; use a known successful pinned digest while preparing the next stable version. Prereleases cannot repair/move stable aliases. Publication of that next verified stable version reconciles both aliases.
+- **Failure after finalization:** inspect the actual Release state and digest evidence. A final state-check/API connection failure can leave an already published Release. Never rerun to overwrite it. Confirm its tag, both manifests and prerelease flag before treating it as successful; fix any issue with a new version.
+
+Repository permissions/rules and registry immutability settings should prevent out-of-band mutations. Preflight collision checks plus serialized workflow writes cannot defend against an unrelated publisher with unrestricted concurrent write credentials. Do not run another publisher for these version tags.

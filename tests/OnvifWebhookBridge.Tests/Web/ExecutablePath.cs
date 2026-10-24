@@ -15,6 +15,28 @@ namespace OnvifWebhookBridge.Tests.Web
             using var data = new TemporaryStorage();
             var native = Environment.GetEnvironmentVariable("ONVIF_TEST_BRIDGE_EXECUTABLE");
             var executable = native ?? Path.Combine(AppContext.BaseDirectory, "OnvifWebhookBridge.dll");
+            var versionInfo = new ProcessStartInfo(native is null ? "dotnet" : executable)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            if (native is null)
+            {
+                versionInfo.ArgumentList.Add(executable);
+            }
+            versionInfo.ArgumentList.Add("--version");
+            // This command must succeed before configuration, secrets, or hosting are initialized.
+            versionInfo.Environment["ONVIF_DATA_DIRECTORY"] = Path.Combine(data.Path, "must-not-be-created");
+            versionInfo.Environment["ONVIF_ADMIN_PASSWORD_FILE"] = Path.Combine(data.Path, "missing-password");
+            using (var version = Process.Start(versionInfo) ?? throw new InvalidOperationException())
+            {
+                await version.WaitForExitAsync(token);
+                Check(version.ExitCode == 0, "VersionExitWithoutAdministrator");
+                Check((await version.StandardOutput.ReadToEndAsync(token)).Trim() == new SessionView("", DateTimeOffset.UnixEpoch).Version, "CompiledExecutableVersion");
+                Check(string.IsNullOrEmpty(await version.StandardError.ReadToEndAsync(token)), "VersionSafeOutput");
+                Check(!Directory.Exists(versionInfo.Environment["ONVIF_DATA_DIRECTORY"]), "VersionDoesNotInitializeStorage");
+            }
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             var port = ((IPEndPoint)listener.LocalEndpoint).Port;
