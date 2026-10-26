@@ -1,5 +1,8 @@
 # ONVIF Webhook Bridge
 
+[![Docker Hub](https://img.shields.io/badge/Docker_Hub-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/dombrovskyi/onvif-webhook-bridge)
+[![GHCR](https://img.shields.io/badge/GHCR-2496ED?logo=github&logoColor=white)](https://github.com/dombrovsky/onvif-webhook-bridge/pkgs/container/onvif-webhook-bridge)
+
 Turn IP camera detection events into HTTP webhooks.
 
 A lightweight, self-hosted Docker application that monitors ONVIF camera events and forwards matching notifications to configurable HTTP endpoints.
@@ -89,9 +92,9 @@ These are integration possibilities, not claims of end-to-end verification with 
 
 ## Documentation
 
-Releases are planned for `linux/amd64` and `linux/arm64` at `ghcr.io/dombrovsky/onvif-webhook-bridge` and a maintainer-configured Docker Hub namespace. The first intended version is `0.1.0-rc.1`; this document does not claim it has been published. After a release is available, use its immutable version tag (without `v`) or digest. Prereleases never update `latest`; stable releases do. The Overview page shows the running executable's version.
+Images for `linux/amd64` and `linux/arm64` are published to both [Docker Hub](https://hub.docker.com/r/dombrovskyi/onvif-webhook-bridge) (`dombrovskyi/onvif-webhook-bridge`) and [GitHub Container Registry (GHCR)](https://github.com/dombrovsky/onvif-webhook-bridge/pkgs/container/onvif-webhook-bridge) (`ghcr.io/dombrovsky/onvif-webhook-bridge`). Use an immutable version tag (without `v`) or digest. Prereleases never update `latest`; stable releases do. The Overview page shows the running executable's version.
 
-To install a published version, set `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` in `.env`, then run `docker compose pull` and `docker compose up -d --no-build`. Keep the existing data volume and password-file settings. See [release setup and upgrades](docs/DEPLOYMENT.md#publishing-a-release) for registry access, version selection and maintainer instructions.
+To install a published version, set `ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridge:0.1.0-rc.1` in `.env` (Docker Hub), or use `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` for GHCR, then run `docker compose pull` and `docker compose up -d --no-build`. Keep the existing data volume and password-file settings. See [release setup and upgrades](docs/DEPLOYMENT.md#publishing-a-release) for registry access, version selection and maintainer instructions.
 
 - [Deployment, upgrades, backup and troubleshooting](docs/DEPLOYMENT.md)
 - [Browser configuration, Event Explorer and rules](docs/BROWSER_ADMINISTRATION.md)

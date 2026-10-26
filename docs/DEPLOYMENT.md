@@ -168,18 +168,20 @@ For `0.2.0` or `1.0.0`, bump the prefix and leave the suffix empty. Each row use
 
 ### Images, installation and upgrades
 
-Both registries receive the same tested content and multi-architecture index:
+Images are published to both Docker Hub and GHCR with the same tested content and multi-architecture index:
 
-- `ghcr.io/dombrovsky/onvif-webhook-bridge:<version>`
-- `<configured-namespace>/onvif-webhook-bridge:<version>` on Docker Hub
+- Docker Hub (default): `dombrovskyi/onvif-webhook-bridge:<version>`
+- GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:<version>`
 
-Runnable architectures are exactly `linux/amd64` and `linux/arm64`. There are no public platform-specific moving aliases or minor/major aliases. Prereleases never touch `latest` or GitHub's latest stable designation. Stable releases update `latest` in both registries only after both immutable version manifests pass verification. Prefer explicit version tags or the index digest in the GitHub Release over `latest` for controlled upgrades. This documentation does not claim any images/releases already exist.
+Runnable architectures are exactly `linux/amd64` and `linux/arm64`. There are no public platform-specific moving aliases or minor/major aliases. Prereleases never touch `latest` or GitHub's latest stable designation. Stable releases update `latest` in both registries only after both immutable version manifests pass verification. Prefer explicit version tags or the index digest in the GitHub Release over `latest` for controlled upgrades.
 
 After a version is published, authenticate if its registry visibility requires it, and set the chosen image in `.env`, for example:
 
 ```sh
-ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1
+ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridge:0.1.0-rc.1
 ```
+
+Alternatively, use `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` for the same version on GHCR.
 
 With the existing password-file and persistent-volume settings intact:
 
