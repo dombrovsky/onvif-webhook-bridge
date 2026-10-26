@@ -1,5 +1,7 @@
 # Phase 3 HTTP verification and handoff
 
+The 2026-10-25 [TaskFlow migration](TASKFLOW_VERIFICATION.md) supersedes the historical custom queue/consumer implementation below. HTTP/security contracts remain in force; TaskFlow now owns scheduling and cancellation of queued work.
+
 ## Execution response diagnostics follow-up — 2026-10-16
 
 The administrator-authorized response inspector supersedes the historical unread-response-body contract below. Execution status now carries the final attempt's HTTP status, bounded valid JSON preview and fixed body/transport diagnostics. Only `application/json` and `+json` responses are read, to at most 16 KiB plus one overflow-detection byte with JSON depth 32. Declared oversized bodies are rejected before reading. Empty, non-JSON, oversized, invalid or unreadable responses retain no body. Reads share the attempt/job cancellation deadlines. A preview failure preserves the received HTTP outcome and cannot independently trigger a retry. A later transport failure clears an earlier attempt's preview/status; exception messages are never exposed. Response content is available only through authenticated status APIs and remains transient, bounded by the configured rule count, never logged or persisted.

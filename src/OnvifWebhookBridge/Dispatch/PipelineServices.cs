@@ -14,7 +14,7 @@ namespace OnvifWebhookBridge.Dispatch
             services.AddSingleton<EventHistory>();
             services.AddSingleton<EventNormalizer>();
             services.AddSingleton<RuleState>();
-            services.AddSingleton<DispatchQueue>();
+            services.AddSingleton<HttpActionDispatcher>();
             services.AddSingleton<CameraPipeline>();
             services.AddHttpClient(HttpActionDispatcher.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateHandler)
@@ -22,7 +22,7 @@ namespace OnvifWebhookBridge.Dispatch
             services.AddHttpClient(HttpActionDispatcher.UnverifiedClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateUnverifiedHandler)
                 .RemoveAllLoggers();
-            services.AddHostedService<HttpActionDispatcher>();
+            services.AddHostedService(provider => provider.GetRequiredService<HttpActionDispatcher>());
             services.AddHostedService<CameraSupervisor>();
             return services;
         }

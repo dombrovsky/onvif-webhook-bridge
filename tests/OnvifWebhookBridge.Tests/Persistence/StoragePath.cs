@@ -9,7 +9,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
     // Shared storage acceptance checks run unchanged on JIT and actual Linux NativeAOT.
     internal static class StoragePath
     {
-        internal static CameraPipeline Pipeline() => new(new RuleState(new EventHistory()), new DispatchQueue(), TimeProvider.System);
+        internal static CameraPipeline Pipeline() => new(new RuleState(new EventHistory()), null, TimeProvider.System);
         internal static SecretEdit<T> Replace<T>(T value) where T : class => new(SecretOperation.Replace, value);
         internal static CameraEdit Camera(bool enabled = true) => new("camera'", "Synthetic camera", "https://camera.example/device", enabled,
             Replace("synthetic-user"), Replace("synthetic-password"));
@@ -21,8 +21,8 @@ namespace OnvifWebhookBridge.Tests.Persistence
         public static void Verify()
         {
             using var temp = new TemporaryStorage();
-            var originalQueue = new DispatchQueue();
-            var pipeline = new CameraPipeline(new RuleState(new EventHistory()), originalQueue, TimeProvider.System);
+            using var dispatcher = new HttpActionDispatcher(new NoNetworkFactory(), TimeProvider.System);
+            var pipeline = new CameraPipeline(new RuleState(new EventHistory()), dispatcher, TimeProvider.System);
             var store = new ConfigurationStore(temp.Path, pipeline);
             store.Initialize();
             Check(store.Read() is { Revision: 0, HasAdministrator: false }, "EmptyDatabase");
@@ -38,22 +38,20 @@ namespace OnvifWebhookBridge.Tests.Persistence
             Check(!string.Join(" ", view.Rules).Contains("synthetic-token", StringComparison.Ordinal) &&
                 !string.Join(" ", view.Cameras).Contains("synthetic-password", StringComparison.Ordinal), "MaskedReads");
             var original = pipeline.Cameras.Single();
-            Check(pipeline.ManualTest("rule'"), "QueuedBeforeSave");
-            var job = originalQueue.TakeAsync(CancellationToken.None).GetAwaiter().GetResult();
-            var queue = new DispatchQueue();
+            Check(pipeline.ManualTest("rule'") && pipeline.Status.Count == 1, "RuntimeExecutionBeforeRestart");
+            // Revision eligibility for accepted work is exercised by scheduled dispatch tests.
             // A fresh host restores config but never previous jobs/status/history/state.
             var history = new EventHistory();
-            var restarted = new CameraPipeline(new RuleState(history), queue, TimeProvider.System);
+            var restarted = new CameraPipeline(new RuleState(history), null, TimeProvider.System);
             var restartStore = new ConfigurationStore(temp.Path, restarted);
             restartStore.Initialize();
             Check(restarted.Cameras.Single() == original && restarted.Status.Count == 0 && history.Snapshot().Count == 0,
                 "RestoredConfigurationTransientRuntime");
-            Check(queue.Stop().Count == 0, "QueueNeverRestored");
+            Check(restarted.LastExecutions.Count == 0, "ExecutionsNeverRestored");
             Check(restartStore.Read().Rules.Single().IgnoreCertificateValidation, "TlsChoiceRestored");
             var match = view.Rules.Single().Match;
             store.Save(1, [new("camera'", "Synthetic camera", original.Endpoint)], [new(match, "Synthetic rule", "POST", 2, ignoreCertificateValidation: true)]);
             Check(ReferenceEquals(pipeline.Cameras.Single(), original), "UnchangedCameraSnapshot");
-            Check(pipeline.Eligible(job), "EquivalentSavePreservesQueuedEligibility");
             using (var connection = temp.Open())
             {
                 Check(Scalar(connection, "SELECT Password FROM Cameras") == "synthetic-password", "PreservedPassword");
@@ -91,7 +89,6 @@ namespace OnvifWebhookBridge.Tests.Persistence
                     headers: new(SecretOperation.Clear), jsonBody: new(SecretOperation.Clear))]);
             Check(store.Read().Cameras.Single() is { HasPassword: false, HasUsername: false } &&
                 store.Read().Rules.Single() is { HasHeaders: false, HasJsonBody: false }, "ExplicitClear");
-            Check(!pipeline.Eligible(job), "CommittedEditInvalidatesQueuedJob");
             using (var connection = temp.Open())
             {
                 Check(Scalar(connection, "SELECT Url FROM Rules") == "https://destination.example/replaced", "ExplicitReplace");
@@ -121,6 +118,11 @@ namespace OnvifWebhookBridge.Tests.Persistence
             using var versionConnection = temp.Open();
             Check(versionConnection.ServerVersion.Length > 0, "NativeLoading");
             Console.WriteLine("PASS: SQLite " + versionConnection.ServerVersion + "; storage transactions, migrations, masking, backup/restore and platform permissions.");
+        }
+
+        private sealed class NoNetworkFactory : IHttpClientFactory
+        {
+            public HttpClient CreateClient(string name) => throw new InvalidOperationException("Synthetic transport.");
         }
 
         private static void VerifyUrlSensitivity()

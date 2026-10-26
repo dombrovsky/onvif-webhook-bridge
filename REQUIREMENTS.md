@@ -54,6 +54,8 @@ Proposed baseline semantics (explicit assumptions pending confirmation):
 
 ### R4 — HTTP delivery
 
+- Authorized TaskFlow migration (2026-10-25): TaskFlow `1.1.0-rc.9` owns keyed scheduling and synchronous admission. The 100/25 pending quotas include dispatched operations until their HTTP delegate actually starts; the previous queue released capacity on consumer claim. Scheduling delay may therefore briefly reject work earlier, without adding a compatibility queue. Application deadlines/retries remain inside delivery. If cancellation wins before admission is reserved, return a cancelled rejection rather than overflow; accepted cancellations consume cooldown as before.
+
 - Certificate validation defaults on. An administrator may explicitly select `Ignore certificate validation` for one webhook, accepting untrusted, expired or mismatched HTTPS certificates and the risk of credential interception. Store this choice per rule and isolate its connection pool from verified webhooks; camera TLS stays strict. This option does not relax redirects or destination-address restrictions.
 - Use IHttpClientFactory for outbound actions. Configure headers per request; never share authorization between destinations. Validate HTTP/HTTPS URLs, method, headers, JSON body, and size limits. Reject embedded URL credentials, control characters, and attempts to override transport-controlled headers.
 - Proposed defaults: 10-second timeout per attempt, 100 pending jobs globally, 4 active jobs globally, at most one active job per rule. Apply fair scheduling so a failing destination cannot monopolize dispatch. Queue overflow rejects the new job and records a safe status/counter; it does not stall subscription polling or remove inspector history.
