@@ -5,6 +5,23 @@ namespace OnvifWebhookBridge.Tests.Dispatch
     {
         private long ticks;
         private readonly List<Timer> timers = [];
+        private TaskCompletionSource changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task WaitForTimer(TimeSpan due)
+        {
+            while (true)
+            {
+                Task next;
+                lock (timers)
+                {
+                    if (timers.Any(t => t.Due == ticks + due.Ticks))
+                    {
+                        return;
+                    }
+                    next = changed.Task;
+                }
+                await next.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
         public override long GetTimestamp() => ticks;
         public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch + TimeSpan.FromTicks(ticks);
@@ -15,6 +32,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                 var timer = new Timer(this, callback, state);
                 timer.Change(dueTime, period);
                 timers.Add(timer);
+                changed.TrySetResult();
+                changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 return timer;
             }
         }
