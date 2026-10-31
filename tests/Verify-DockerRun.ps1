@@ -29,9 +29,11 @@ function Ready {
     }
     throw 'README container did not become healthy.'
 }
-function Login {
+function Login([string]$value = $password, [int]$expected = 200) {
     $script:origin = 'http://' + (Invoke-Docker port $id 8080/tcp)
-    $response = Invoke-WebRequest "$origin/api/login" -Method Post -Headers @{Origin=$origin} -ContentType application/json -Body (@{username='admin';password=$password} | ConvertTo-Json -Compress) -SessionVariable session
+    $response = Invoke-WebRequest "$origin/api/login" -Method Post -Headers @{Origin=$origin} -ContentType application/json -Body (@{username='admin';password=$value} | ConvertTo-Json -Compress) -SessionVariable session -SkipHttpErrorCheck -TimeoutSec 30
+    if ([int]$response.StatusCode -ne $expected) { throw "Administrator login expected HTTP $expected, received $([int]$response.StatusCode)." }
+    if ($expected -ne 200) { return }
     $script:webSession = $session
     $script:csrf = ($response.Content | ConvertFrom-Json).csrfToken
 }
@@ -61,7 +63,9 @@ try {
     Login
     $cameras = @(Invoke-RestMethod "$origin/api/cameras" -WebSession $webSession)
     if ($cameras.Count -ne 1 -or $cameras[0].name -ne 'Synthetic persistence check' -or $cameras[0].enabled) { throw 'Docker run recreation lost saved configuration.' }
+    $configurationBeforeReset = (Invoke-WebRequest "$origin/api/configuration" -WebSession $webSession).Content
     Invoke-Docker stop $id | Out-Null
+    $oldPassword = $password
     $password = '  synthetic replacement password  '
     $password | & docker run --rm -i --mount "type=volume,src=$id-bootstrap,dst=/data" --entrypoint /bin/bash $Image -c $initializer | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Reset password initialization failed.' }
@@ -75,7 +79,10 @@ try {
     Invoke-Docker @resetArguments | Out-Null
     Invoke-Docker start $id | Out-Null
     $info = Ready
-    Login
+    Login $oldPassword 401
+    Login $password 200
+    $configurationAfterReset = (Invoke-WebRequest "$origin/api/configuration" -WebSession $webSession).Content
+    if ($configurationAfterReset -cne $configurationBeforeReset) { throw 'Offline reset changed saved configuration.' }
     Write-Output "PASS: README Docker run, whitespace password login, health/UI, runtime restrictions and persistence across container removal/recreation, plus documented offline reset; version $version; image $($info.Image)."
 }
 finally {

@@ -31,6 +31,8 @@ docker ps --filter name=onvif-bridge
 
 Open **http://localhost:8080 on the Docker host**, sign in as `admin` with your password, and add a camera. For a remote server/NAS, use an SSH tunnel or validated HTTPS setup; the default host binding is loopback. A [Compose alternative and full configuration reference](https://github.com/dombrovsky/onvif-webhook-bridge/blob/main/docs/DEPLOYMENT.md#docker-compose-alternative) are available.
 
+For multiple independent installations, use distinct container names, data volumes, bootstrap volumes and host ports; update the bootstrap name in both commands. See [deployment guidance](https://github.com/dombrovsky/onvif-webhook-bridge/blob/main/docs/DEPLOYMENT.md#multiple-independent-installations).
+
 The service runs as UID/GID **1654:1654** with a read-only root filesystem. Docker initializes the private named volumes with the correct ownership. `onvif-bridge-data` persists configuration at `/data`; the separate `onvif-bridge-bootstrap` volume holds the password file. Bootstrap applies only to an empty administrator record; changing the file later does not change login. No plaintext password environment variable is required. Bind mounts require explicit ownership and private permissions; stored camera/webhook secrets and backups are recoverable plaintext.
 
 ## Versions and upgrades

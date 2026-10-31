@@ -60,6 +60,8 @@ docker ps --filter name=onvif-bridge
 
 Open [http://localhost:8080](http://localhost:8080) on the Docker host and log in as `admin` with your password. For a remote server or NAS, use an [SSH tunnel or HTTPS setup](docs/DEPLOYMENT.md#remote-access-and-nas); the default port is private to the host. Add a camera in **Cameras**, then use **Event Explorer** to draft and review a forwarding rule.
 
+For multiple independent installations, use distinct container names, data volumes, bootstrap volumes and host ports; update the bootstrap name in both commands. See [deployment guidance](docs/DEPLOYMENT.md#multiple-independent-installations).
+
 For GHCR, replace the image in both commands with `ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.3`. For Compose, see the [Compose example and configuration reference](docs/DEPLOYMENT.md#docker-compose-alternative), plus [upgrades and recovery](docs/DEPLOYMENT.md#storage-backup-upgrades-and-recovery). Local builds are covered in [development](docs/DEVELOPMENT.md#local-container-builds).
 
 After the first stable release, you can use `dombrovskyi/onvif-webhook-bridge:latest` (or the GHCR equivalent). **`latest` is not available yet**; prereleases never create or update it. The release workflow updates it in both registries only for non-prerelease releases.

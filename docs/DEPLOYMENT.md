@@ -63,9 +63,58 @@ docker run --rm --network none --user 1654:1654 --read-only --cap-drop ALL --sec
 
 Require exit zero before `docker start onvif-bridge`. For an explicit offline reset with Compose, stop the bridge and take a protected consistent backup first. Run the interactive password command again using the **same bootstrap volume**, then `docker compose run --rm --no-deps bridge --reset-administrator`. Require exit zero before `docker compose up -d --no-build`. Cameras, rules and revisions are preserved; see [administrator policy](ADMINISTRATION.md).
 
-### Possible future setup UI
+### Migrate Docker run to Compose
 
-A browser setup wizard would be an authentication change, outside this installation work. A safe design would require a short-lived, single-use local setup token, protected delivery of that token, same-origin/CSRF checks, bounded attempts, and transactional first-administrator creation before enabling workers or other APIs. Concurrent setup and restart/replay behavior would need dedicated tests. An unauthenticated publicly reachable first-user-wins setup page would weaken the current fail-closed behavior. The named password volume already removes host ownership commands without changing authentication.
+Use the same image version/digest during migration; upgrade separately. These commands use the README's default names. If yours differ, substitute the exact existing container and volume names throughout.
+
+1. Record the current image and both mounted volume names:
+
+   ```sh
+   docker inspect --format '{{.Config.Image}} {{.Image}}' onvif-bridge
+   docker inspect --format '{{range .Mounts}}{{println .Destination .Name}}{{end}}' onvif-bridge
+   ```
+
+2. Stop the original container and verify it is stopped. Keep it for rollback. Never start Compose while this container, or any other process using its database, is running:
+
+   ```sh
+   docker stop onvif-bridge
+   docker inspect --format '{{.State.Status}}' onvif-bridge
+   ```
+
+   Require `exited`. Before proceeding, take a consistent private backup of the complete data directory (including any SQLite sidecars) and bootstrap file from the stopped container:
+
+   ```sh
+   umask 077
+   mkdir migration-backup
+   docker cp onvif-bridge:/data/. ./migration-backup/data
+   docker cp onvif-bridge:/run/bootstrap/. ./migration-backup/bootstrap
+   ```
+
+   Require each command to succeed. Keep this directory private; it contains recoverable secrets. Do not overwrite an existing backup.
+
+3. Save the Compose example in a permanent directory, select the same image through `ONVIF_IMAGE` in `.env`, and **replace** its top-level `volumes` section with the following. Use the exact names recorded in step 1; do not initialize fresh volumes or rerun password setup:
+
+   ```yaml
+   volumes:
+     bridge-data:
+       external: true
+       name: onvif-bridge-data
+     administrator-bootstrap:
+       external: true
+       name: onvif-bridge-bootstrap
+   ```
+
+   Keep the service mounts `bridge-data:/data` and `administrator-bootstrap:/run/bootstrap:ro`. Match the original host binding/port with the Compose variables if customized. Run `docker compose config --quiet`, then `docker compose up -d --no-build` only after the original container is stopped.
+
+4. Run `docker compose ps` and wait for `healthy`. Log in with the existing credentials and verify saved cameras/rules and their enabled states. Confirm `docker inspect` on the Compose container shows the original image ID and both exact volume names. Do not start the old container to compare configuration.
+
+5. Keep the old container stopped until those checks pass. It is then safe to remove **only** that container with `docker rm onvif-bridge`; keep the volumes and private backup. Before removal, rollback is `docker compose stop` (verify its container is exited), then `docker start onvif-bridge`. After removal, stop Compose before recreating the old Docker run command with the same image and volumes. Never run both instances together. If restoring the backup becomes necessary, stop all database users first and follow [storage recovery](DATA_STORAGE.md); do not restore over a live database.
+
+### Multiple independent installations
+
+Docker-run container names, named volumes and published host ports are host-wide. Each independent installation must use a distinct **container name, persistent data volume name, administrator bootstrap volume name and host port**. Change the bootstrap volume name in both the password command and startup command, plus the data volume, `--name` and host side of `--publish`. Reusing a bootstrap volume can silently give a new installation another installation's administrator password.
+
+With Compose, use a distinct project name/directory for separate container and data-volume names, set a distinct `ONVIF_BOOTSTRAP_VOLUME` and `ONVIF_PUBLISHED_PORT`, and initialize that exact bootstrap volume. Explicit external volume names remain global even with different Compose projects. Share existing volumes only when migrating the **same** installation with its original process stopped, as above.
 
 ### Configuration reference
 
@@ -108,7 +157,7 @@ Use `docker compose run --rm --no-deps bridge --version` for version inspection.
 
 ### Storage and container restrictions
 
-With Compose, `bridge-data` is a project-scoped named volume mounted at `/data`. The README Docker run command instead uses the explicit name `onvif-bridge-data`. Do not switch between these names expecting the same database. To move an existing Docker run installation to Compose, keep its volume by declaring `bridge-data: {external: true, name: onvif-bridge-data}` in the top-level `volumes` section. Keep the same project name/directory across upgrades; changing it can create an apparently empty installation. Never point two processes at one database. Named volumes avoid host UID and NAS ACL setup on a fresh install. Existing volumes do not inherit updated image ownership.
+With Compose, `bridge-data` is a project-scoped named volume mounted at `/data`. The README Docker run command instead uses the explicit name `onvif-bridge-data`. Do not switch between these names expecting the same database. Follow the [migration procedure](#migrate-docker-run-to-compose) to reuse existing volumes safely. Keep the same project name/directory across upgrades; changing it can create an apparently empty installation. Never point two processes at one database. Named volumes avoid host UID and NAS ACL setup on a fresh install. Existing volumes do not inherit updated image ownership.
 
 For a bind mount, replace `bridge-data:/data` with an absolute dedicated host directory. Arrange ownership **1654:1654** offline (or the mapped host account under rootless/user-namespace Docker); owner directory mode **0700**, DB and sidecar files **0600** are enforced. NAS ACLs must permit that identity to read/write and change modes. Fix ownership offline, never by running the service as root or making storage world-writable. Filesystem restrictions are not encryption at rest. See [storage](DATA_STORAGE.md).
 
