@@ -41,6 +41,10 @@ def source_version(xml=None):
         nodes = root.findall(f".//{name}")
         require(len(nodes) == 1 and not nodes[0].attrib, f"Define exactly one unconditional {name} in Directory.Build.props.")
         values.append(nodes[0].text or "")
+    if values[1] == "rc.$(RcNumber)":
+        number = os.environ.get("GITHUB_RUN_NUMBER", "") or "1"
+        require(re.fullmatch(r"[1-9][0-9]*", number) is not None, "GITHUB_RUN_NUMBER must be a positive integer.")
+        values[1] = "rc." + number
     result = values[0] + ("-" + values[1] if values[1] else "")
     version(result)
     return result

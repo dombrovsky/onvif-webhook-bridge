@@ -52,7 +52,7 @@ jobs:
         shell: pwsh
       - run: ./tests/Verify-Phase7Native.ps1 -Platform linux/${{ matrix.arch }}
         shell: pwsh
-      - run: docker build --platform linux/${{ matrix.arch }} --build-arg VERSION="$BUILD_VERSION" --build-arg REVISION="$(git rev-parse HEAD)" -t onvif-webhook-bridge:verify .
+      - run: docker build --platform linux/${{ matrix.arch }} --build-arg GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" --build-arg VERSION="$BUILD_VERSION" --build-arg REVISION="$(git rev-parse HEAD)" -t onvif-webhook-bridge:verify .
       - name: Browser tooling (test only)
         if: matrix.arch == 'amd64'
         run: |

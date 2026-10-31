@@ -20,6 +20,8 @@ FROM toolchain AS build
 ARG TARGETARCH
 ARG VERSION
 ARG REVISION
+# Match the workflow counter used by release.py and host MSBuild.
+ARG GITHUB_RUN_NUMBER
 WORKDIR /source
 COPY Directory.Build.props Directory.Build.targets ./
 COPY src/OnvifWebhookBridge/OnvifWebhookBridge.csproj src/OnvifWebhookBridge/

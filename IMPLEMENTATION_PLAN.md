@@ -1,5 +1,7 @@
 # Implementation plan
 
+Authorized candidate numbering (2026-10-31): resolve rc.$(RcNumber) using GITHUB_RUN_NUMBER in GitHub builds, with local fallback 1. Pass the same counter into Docker; retain source validation, stable behavior and collision guards. No publication is authorized by this change.
+
 Authorized release simplification (2026-10-24): remove the manual workflow version input. Resolve the authoritative prefix/suffix from Directory.Build.props at the selected protected-main revision, pass it through verification/publication, and retain all existing version/tag/release/registry collision guards. Publication remains unauthorized during implementation.
 
 Authorized release follow-up (2026-10-22): source-controlled Semantic Versioning in Directory.Build.props; compiled CLI/authenticated Overview version; manual exact-main-revision release using the existing native AMD64/ARM64 CI artifacts; matching GHCR/Docker Hub manifests and draft-to-final GitHub Releases. Version bumps require a reviewed PR; failed reserved versions are never reused. No publication, release tags, visibility changes or deployment is authorized during implementation. See [release procedure](docs/DEPLOYMENT.md#publishing-a-release) and [verification](docs/DEPLOYMENT_VERIFICATION.md#versioned-release-pipeline).
