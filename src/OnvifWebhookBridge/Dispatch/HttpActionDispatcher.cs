@@ -11,6 +11,7 @@ namespace OnvifWebhookBridge.Dispatch
     {
         private readonly TaskFlow flow;
         private readonly ITaskScheduler scheduler;
+        internal ITaskScheduler Scheduler => scheduler;
         private readonly BoundedAdmissionController admission = new(new BoundedAdmissionOptions
         {
             Capacity = 100,
@@ -60,7 +61,7 @@ namespace OnvifWebhookBridge.Dispatch
             var completion = attempt.Completion!;
             // Observe the returned task as well as its middleware outcome. This callback only
             // reads the task: status publication is part of TaskFlow's awaited lifetime.
-            completion.GetAwaiter().OnCompleted(() => _ = completion.Exception);
+            completion.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => _ = completion.Exception);
             return true;
         }
 
@@ -79,7 +80,9 @@ namespace OnvifWebhookBridge.Dispatch
         }
 
         public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task StopAsync(CancellationToken cancellationToken) => flow.DisposeAsync().AsTask();
+        // Cancelling the host's wait does not abandon ownership: TaskFlow retains its
+        // shared shutdown task, and DI disposal below still awaits full settlement.
+        public Task StopAsync(CancellationToken cancellationToken) => flow.DisposeAsync().AsTask().WaitAsync(cancellationToken);
         public ValueTask DisposeAsync() => flow.DisposeAsync();
         public void Dispose() => flow.Dispose();
 

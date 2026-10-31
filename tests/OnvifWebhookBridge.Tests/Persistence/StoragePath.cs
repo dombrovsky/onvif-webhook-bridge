@@ -9,7 +9,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
     // Shared storage acceptance checks run unchanged on JIT and actual Linux NativeAOT.
     internal static class StoragePath
     {
-        internal static CameraPipeline Pipeline() => new(new RuleState(new EventHistory()), null, TimeProvider.System);
+        internal static CameraPipeline Pipeline() => new(new RuleState(new EventHistory()), static (_, _) => false, TimeProvider.System);
         internal static SecretEdit<T> Replace<T>(T value) where T : class => new(SecretOperation.Replace, value);
         internal static CameraEdit Camera(bool enabled = true) => new("camera'", "Synthetic camera", "https://camera.example/device", enabled,
             Replace("synthetic-user"), Replace("synthetic-password"));
@@ -22,7 +22,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
         {
             using var temp = new TemporaryStorage();
             using var dispatcher = new HttpActionDispatcher(new NoNetworkFactory(), TimeProvider.System);
-            var pipeline = new CameraPipeline(new RuleState(new EventHistory()), dispatcher, TimeProvider.System);
+            var pipeline = new CameraPipeline(new RuleState(new EventHistory()), dispatcher.TrySubmit, TimeProvider.System);
             var store = new ConfigurationStore(temp.Path, pipeline);
             store.Initialize();
             Check(store.Read() is { Revision: 0, HasAdministrator: false }, "EmptyDatabase");
@@ -42,7 +42,7 @@ namespace OnvifWebhookBridge.Tests.Persistence
             // Revision eligibility for accepted work is exercised by scheduled dispatch tests.
             // A fresh host restores config but never previous jobs/status/history/state.
             var history = new EventHistory();
-            var restarted = new CameraPipeline(new RuleState(history), null, TimeProvider.System);
+            var restarted = new CameraPipeline(new RuleState(history), static (_, _) => false, TimeProvider.System);
             var restartStore = new ConfigurationStore(temp.Path, restarted);
             restartStore.Initialize();
             Check(restarted.Cameras.Single() == original && restarted.Status.Count == 0 && history.Snapshot().Count == 0,

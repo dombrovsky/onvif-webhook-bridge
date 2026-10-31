@@ -1,6 +1,6 @@
 # Administrator setup and API
 
-The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` when its persistent configuration read succeeds after startup, or an empty 503 on storage failure; it does not depend on camera readiness. All data and administration routes require a session except same-origin login. Phase 7 adds only a public empty login shell at `/` and its fixed `/app.js` and `/app.css` assets. See [browser usage](BROWSER_ADMINISTRATION.md).
+The application requires one administrator before it starts HTTP listeners, the dispatcher or camera workers. There is no default account, browser setup wizard or public reset route. `/health` returns only `Healthy` when its persistent configuration read succeeds after startup, or an empty 503 on storage failure; it does not depend on camera readiness. All data and administration routes require a session except same-origin login. The browser serves a public empty login shell at `/` and its fixed `/app.js` and `/app.css` assets. See [browser usage](BROWSER_ADMINISTRATION.md).
 
 ## Initial setup
 
@@ -11,7 +11,7 @@ Set `ONVIF_DATA_DIRECTORY` to a dedicated private directory and supply `ONVIF_AD
 
 Username must be nonblank and at most 256 units. Incomplete setup, conflicting password sources, unreadable/oversized password files or invalid new credentials stop startup with a fixed message and exit code 1. No account is created on invalid input. With no established administrator and no setup variables, startup also exits 1 before any workers or HTTP listeners start. Storage initialization may create an empty private database first.
 
-Normal startup ignores all administrator setup variables once an administrator exists, including stale or unavailable password-file settings. Changing these variables never replaces the existing credential. Remove plaintext bootstrap variables when no longer needed. The database stores only the username and salted PBKDF2-HMAC-SHA256 password hash (600,000 iterations, random 16-byte salt, 32-byte result), retaining the phase 5 format. Each login verifies with a constant-time hash comparison; unknown usernames do the same adaptive work. There is no plaintext administrator password column or API to read the hash.
+Normal startup ignores all administrator setup variables once an administrator exists, including stale or unavailable password-file settings. Changing these variables never replaces the existing credential. Remove plaintext bootstrap variables when no longer needed. The database stores only the username and salted PBKDF2-HMAC-SHA256 password hash (600,000 iterations, random 16-byte salt, 32-byte result). Each login verifies with a constant-time hash comparison; unknown usernames do the same adaptive work. There is no plaintext administrator password column or API to read the hash.
 
 ## Explicit offline password reset
 
@@ -35,13 +35,13 @@ Login is bounded to five attempts per direct peer address and 20 globally per on
 
 Every other API request sends the session cookie. `GET /api/session` returns the CSRF token and absolute expiry for that session. Every mutation and manual test also requires the same `Origin` and `X-CSRF-Token` header from that session. This applies to PUT, DELETE and POST, including logout and connectivity/HTTP tests. An invalid or missing session gives 401; invalid CSRF/origin gives 403. `POST /api/logout` invalidates the session and deletes its cookie. Liveness is the sole anonymous API read.
 
-All API responses use no-store caching, JSON's default HTML-sensitive escaping, nosniff and a restrictive CSP. Phase 7 serves embedded plain browser screens; names/XML are rendered as inert text. CSP permits same-origin scripts/styles/connections, forbids inline scripts and disallows base URLs, foreign form submissions and framing. No internal configuration snapshots, hashes, camera credentials, sensitive action URLs, headers/bodies or arbitrary exception messages are serialized. Explicitly visible action URLs are returned only in authenticated configuration reads; see [URL sensitivity](BROWSER_ADMINISTRATION.md#urls-and-secrets). Inspector event content is intentionally preserved within its existing bounds; treat authenticated event inspection as sensitive.
+All API responses use no-store caching, JSON's default HTML-sensitive escaping, nosniff and a restrictive CSP. The application serves embedded plain browser screens; names/XML are rendered as inert text. CSP permits same-origin scripts/styles/connections, forbids inline scripts and disallows base URLs, foreign form submissions and framing. No internal configuration snapshots, hashes, camera credentials, sensitive action URLs, headers/bodies or arbitrary exception messages are serialized. Explicitly visible action URLs are returned only in authenticated configuration reads; see [URL sensitivity](BROWSER_ADMINISTRATION.md#urls-and-secrets). Inspector event content is intentionally preserved within its existing bounds; treat authenticated event inspection as sensitive.
 
 ## Routes and edits
 
 | Route | Behavior |
 | --- | --- |
-| `GET /health` | Fixed process liveness text only; no camera/configuration/storage details. |
+| `GET /health` | Fixed liveness text only; storage readiness failures return 503. A disconnected camera alone does not make the process unhealthy. |
 | `POST /api/login`, `GET /api/session`, `POST /api/logout` | Session operations above. |
 | `GET /api/configuration` | Masked cameras/rules, configuration revision and administrator-presence flag. |
 | `GET /api/cameras`, `GET /api/rules` | Masked lists. Read configuration for the revision before editing. |
@@ -56,7 +56,7 @@ All API responses use no-store caching, JSON's default HTML-sensitive escaping, 
 
 Camera PUT JSON has required `revision`, `name`, `endpoint`, optional `enabled` (defaults false) and `username`/`password` secret edits. Rule PUT has required `revision`, `name`, `cameraId`, `topic`, optional `condition`, `enabled` (false), `mode` (0), `cooldownSeconds` (0), `method` (`GET`), `additionalAttempts` (0), `ignoreCertificateValidation` (false), and `url`/`headers`/`jsonBody` secret edits. PUT replaces public fields; include their desired values rather than treating PUT as a patch. Rule reads return the existing `match` record with `cooldown` as a JSON TimeSpan string; edit requests use numeric `cooldownSeconds`.
 
-`condition` uses `section` (0 Source, 1 Data), `name`, `expectedValue`, `comparison` (0 Text, 1 Boolean). `mode` is 0 Occurrence or 1 Transition; Transition requires a condition. Undefined enum values fail validation. No schema/vendor field names are assumed. Retries and all matching/transition/cooldown behavior retain [the existing contracts](HTTP_VERIFICATION.md).
+`condition` uses `section` (0 Source, 1 Data), `name`, `expectedValue`, `comparison` (0 Text, 1 Boolean). `mode` is 0 Occurrence or 1 Transition; Transition requires a condition. Undefined enum values fail validation. No schema/vendor field names are assumed. Retries and all matching/transition/cooldown behavior retain [matching and delivery](BROWSER_ADMINISTRATION.md#matching-and-delivery).
 
 Secret edits are JSON objects with numeric `operation`: 0 Preserve (default), 1 Replace, 2 Clear. Replace requires a non-null `value`; Preserve/Clear forbid a replacement value. Omit the edit to preserve. Camera credentials/action URL/body use string values; headers use an array of `{"name":"<header-name>","value":"<header-value>"}`. Clear both camera credentials together for an unauthenticated camera. Clear optional headers/body independently; required action URL cannot be cleared. Secret reads give presence flags, never replacement values; explicitly visible action URLs are the exception described above. First creation of a rule requires an explicit URL replacement.
 
@@ -64,7 +64,7 @@ All durable changes use the store transaction and expected revision before chang
 
 JSON uses source-generated metadata only, rejects unknown properties, missing required constructor fields and nulls for non-nullable fields, and retains the default depth limit of 64. JSON request bodies are capped at 256 KiB with a ten-second read deadline, even without Content-Length. Existing configuration limits remain: 64 cameras, 256 rules, bounded strings/headers/literal JSON, bounded history/identities/dispatch. Connectivity shares the reviewed pinned library client and existing DNS-checked HTTP transport policy: no metadata/link-local/unspecified/multicast addresses, redirects, proxy or cookie sharing; private destinations and ordinary certificate verification remain supported. Known self-target camera endpoints are rejected on API edits and known self-target actions remain ineligible. DNS aliases of the application are not universally identifiable.
 
-Logging providers remain cleared; HttpClientFactory request loggers remain removed, and the ONVIF library logger is unset. Fixed API failures do not include provider/network exceptions or submitted values. Do not enable request-body/URL/header/SOAP logging or library diagnostics with real secrets. See [phase 6 verification](ADMIN_VERIFICATION.md) for the tested runtime boundaries and remaining hardware/platform gates.
+Logging providers remain cleared; HttpClientFactory request loggers remain removed, and the ONVIF library logger is unset. Fixed API failures do not include provider/network exceptions or submitted values. Do not enable request-body/URL/header/SOAP logging or library diagnostics with real secrets. See [development and tests](DEVELOPMENT.md) for current verification commands.
 
 ## URL visibility extension (schema 4)
 

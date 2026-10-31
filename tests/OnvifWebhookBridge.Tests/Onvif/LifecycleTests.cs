@@ -95,7 +95,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
         public void CameraRevisionsAreIndependentAndRecreationCannotReviveStalePulls()
         {
             var history = new EventHistory();
-            var pipeline = new CameraPipeline(new(history), null, TimeProvider.System);
+            var pipeline = new CameraPipeline(new(history), static (_, _) => false, TimeProvider.System);
             var a = new CameraConfiguration("camera", "Synthetic", "http://synthetic.invalid/a");
             var b = a with
             {
@@ -119,13 +119,13 @@ namespace OnvifWebhookBridge.Tests.Onvif
             Assert.Equal(2, pipeline.Cameras.Count);
         }
 
-        private static CameraPipeline CreatePipeline() => new(new(new EventHistory()), null, TimeProvider.System);
+        private static CameraPipeline CreatePipeline() => new(new(new EventHistory()), static (_, _) => false, TimeProvider.System);
 
         [Fact]
         public void SubscriptionEpochResetIsPerCameraAndPreservesCooldown()
         {
             using var dispatcher = new HttpActionDispatcher(new NoNetworkFactory(), TimeProvider.System);
-            var pipeline = new CameraPipeline(new(new EventHistory()), dispatcher, TimeProvider.System);
+            var pipeline = new CameraPipeline(new(new EventHistory()), dispatcher.TrySubmit, TimeProvider.System);
             var a = new CameraConfiguration("camera", "Synthetic A", "http://synthetic.invalid/a");
             var b = a with
             {

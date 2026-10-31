@@ -12,6 +12,7 @@ namespace OnvifWebhookBridge.Tests.Web
     using System.Net;
     using System.Security.Cryptography;
     using System.Security.Cryptography.X509Certificates;
+    using System.Threading.Tasks.Flow;
 
     // Real local TLS, shared unchanged between JIT and Linux NativeAOT.
     internal static class WebhookTlsPath
@@ -69,20 +70,18 @@ namespace OnvifWebhookBridge.Tests.Web
                 [new(match, "Synthetic TLS action", ignoreCertificateValidation: true)]);
             hold = true;
             StoragePath.Check(pipeline.ManualTest(match.Id), "TlsActiveBeforeEdit");
-            await entered.Task.WaitAsync(token);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(35), token);
             StoragePath.Check(pipeline.ManualTest(match.Id), "TlsQueuedBeforeEdit");
             store.Save(revision, [new("tls-camera", "Synthetic TLS camera", "http://camera.example/device")],
                 [new(match, "Synthetic TLS action", ignoreCertificateValidation: false)]);
             release.SetResult();
             await UntilCompleted();
             StoragePath.Check(count == 2 && pipeline.Status.Single().Result == ExecutionResult.Stale, "TlsStaleNeverSends");
-            async Task UntilCompleted()
-            {
-                while (pipeline.Status.Single().Result is ExecutionResult.Queued or ExecutionResult.Running)
-                {
-                    await Task.Delay(20, token);
-                }
-            }
+            // Entry of the same-key barrier requires prior delivery and completion work
+            // to quiesce; no polling or additional HTTP request is needed.
+            Task UntilCompleted() => dispatcher.Scheduler.Enqueue(match.Id,
+                static (string _, CancellationToken _) => Task.CompletedTask, token)
+                .WaitAsync(TimeSpan.FromSeconds(35), token);
             using var cameraHandler = HttpActionDispatcher.CreateHandler();
             using var cameraClient = new HttpClient(cameraHandler);
             try

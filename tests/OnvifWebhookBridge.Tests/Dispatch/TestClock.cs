@@ -8,6 +8,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         private TaskCompletionSource changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task WaitForTimer(TimeSpan due)
         {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (true)
             {
                 Task next;
@@ -19,12 +20,12 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                     }
                     next = changed.Task;
                 }
-                await next.WaitAsync(TimeSpan.FromSeconds(5));
+                await next.WaitAsync(deadline.Token);
             }
         }
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-        public override long GetTimestamp() => ticks;
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch + TimeSpan.FromTicks(ticks);
+        public override long GetTimestamp() => Interlocked.Read(ref ticks);
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch + TimeSpan.FromTicks(GetTimestamp());
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
             lock (timers)
@@ -42,7 +43,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             Timer[] due;
             lock (timers)
             {
-                ticks += elapsed.Ticks;
+                Interlocked.Add(ref ticks, elapsed.Ticks);
                 due = timers.Where(t => t.Due <= ticks).ToArray();
                 foreach (var timer in due)
                 {

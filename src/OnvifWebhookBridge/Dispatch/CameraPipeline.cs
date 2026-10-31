@@ -9,8 +9,8 @@ namespace OnvifWebhookBridge.Dispatch
     public sealed record ActionRule(ForwardingRule Match, HttpAction Action);
 
     // One lock orders configuration, matching, admission and execution eligibility checks.
-    // No administration endpoints; callers supply private in-memory configuration through DI.
-    public sealed class CameraPipeline(RuleState rules, HttpActionDispatcher? dispatcher, TimeProvider clock)
+    // Admission stays synchronous; configuration validation supplies an explicit rejecting callback.
+    public sealed class CameraPipeline(RuleState rules, Func<DispatchJob, CameraPipeline, bool> trySubmit, TimeProvider clock)
     {
         private readonly object gate = new();
         private Dictionary<string, (CameraConfiguration Camera, long Revision)> cameras = new(StringComparer.Ordinal);
@@ -190,7 +190,7 @@ namespace OnvifWebhookBridge.Dispatch
             bool accepted;
             try
             {
-                accepted = dispatcher?.TrySubmit(job, this) == true;
+                accepted = trySubmit(job, this);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {

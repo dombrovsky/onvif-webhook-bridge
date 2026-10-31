@@ -11,6 +11,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
     using System.Net;
     using System.Net.Http.Headers;
     using System.Text;
+    using System.Threading.Tasks.Flow;
     using Xunit;
 
     [Trait("Category", "Unit")]
@@ -138,6 +139,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             releaseOthers.SetResult();
             releaseHot.Release(25);
             await h.Logs.WaitForCount(30);
+            await h.Quiesce();
             Assert.Equal(hotIds, h.Logs.Results.Where(r => hotIds.Contains(r.Job)).Select(r => r.Job));
             Assert.Equal(30, h.Logs.Results.Count);
             Assert.All(h.Logs.Results, r => Assert.Equal(ExecutionResult.Accepted, r.Result));
@@ -170,6 +172,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                 h.Start(factory);
                 Assert.True(h.Pipeline.ManualTest("rule"));
                 await h.Logs.WaitForCount(i + 2);
+                await h.Quiesce();
                 Assert.Equal(ExecutionResult.Accepted, h.Pipeline.Status.Single().Result);
             }
             Assert.Equal(101, h.Logs.Results.Select(r => r.Job).Distinct().Count());
@@ -201,6 +204,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             Assert.Equal(ExecutionResult.Cancelled, h.Pipeline.Status.Single().Result);
             release.SetResult();
             await h.Logs.WaitForCount(2);
+            await h.Quiesce();
             Assert.Equal(latest, h.Pipeline.Status.Single().JobId);
             Assert.Equal(ExecutionResult.Cancelled, h.Pipeline.Status.Single().Result);
             Assert.Equal(2, h.Logs.Results.Count);
@@ -391,6 +395,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             pipeline.Configure(Camera, [Rule(action: new("http://synthetic.invalid/" + FakeSecret, "POST", [new("Authorization", FakeSecret)], "\"" + FakeSecret + "\"", ignoreCertificateValidation: ignoreCertificateValidation))]);
             Assert.True(pipeline.ManualTest("rule"));
             await logs.WaitForCount(1);
+            await provider.GetRequiredService<HttpActionDispatcher>().DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(ExecutionResult.TransportFailure, pipeline.Status.Single().Result);
             Assert.DoesNotContain(FakeSecret, logs.Text.ToString());
             Assert.DoesNotContain("synthetic.invalid", logs.Text.ToString());
@@ -566,10 +571,11 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                 {
                     TaskScheduler = new RejectingScheduler()
                 }), logs);
-            var pipeline = new CameraPipeline(new(new EventHistory()), dispatcher, TimeProvider.System);
+            var pipeline = new CameraPipeline(new(new EventHistory()), dispatcher.TrySubmit, TimeProvider.System);
             pipeline.Configure(Camera, [Rule()]);
             Assert.True(pipeline.ManualTest("rule"));
             await logs.WaitForCount(1);
+            await dispatcher.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(ExecutionResult.TransportFailure, pipeline.Status.Single().Result);
             Assert.Equal(0, pipeline.Status.Single().Attempts);
             Assert.Equal(0, factory.Calls);
@@ -644,6 +650,144 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         }
 
         [Fact]
+        public void CancellationWinningAdmissionIsNotResubmittedOrReportedAsOverflow()
+        {
+            using var cancellation = new CancellationTokenSource();
+            var submissions = 0;
+            var pipeline = new CameraPipeline(new(new EventHistory()), (job, _) =>
+            {
+                submissions++;
+                Assert.Equal(cancellation.Token, job.Cancellation);
+                cancellation.Cancel();
+                throw new OperationCanceledException(cancellation.Token);
+            }, TimeProvider.System);
+            pipeline.Configure(Camera, [Rule()]);
+            Assert.False(pipeline.ManualTest("rule", cancellation.Token));
+            Assert.Equal(1, submissions);
+            Assert.Equal(ExecutionResult.Cancelled, pipeline.Status.Single().Result);
+            Assert.Empty(pipeline.LastExecutions); // no accepted execution or overflow was invented
+        }
+
+        [Fact]
+        public async Task HostStopDeadlineDoesNotDisposeResourcesUnderNonCooperativeTransport()
+        {
+            var transport = new DelayedFactory();
+            var logs = new CaptureLogger();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddCameraPipeline();
+            services.AddSingleton<IHttpClientFactory>(_ => transport);
+            services.AddSingleton<ILogger<HttpActionDispatcher>>(logs);
+            await using var provider = services.BuildServiceProvider();
+            var dispatcher = provider.GetRequiredService<HttpActionDispatcher>();
+            var pipeline = provider.GetRequiredService<CameraPipeline>();
+            pipeline.Configure(Camera, [Rule()]);
+            Task? disposal = null;
+            try
+            {
+                Assert.True(pipeline.ManualTest("rule"));
+                await transport.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.True(pipeline.ManualTest("rule"));
+                using var hostDeadline = new CancellationTokenSource();
+                var stop = dispatcher.StopAsync(hostDeadline.Token);
+                await transport.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(stop.IsCompleted);
+                hostDeadline.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stop.WaitAsync(TimeSpan.FromSeconds(5)));
+                Assert.False(pipeline.ManualTest("rule"));
+                Assert.Equal(1, dispatcher.Rejected);
+                disposal = provider.DisposeAsync().AsTask();
+                Assert.False(disposal.IsCompleted);
+                Assert.False(transport.Disposed);
+                transport.Release.SetResult();
+                await disposal.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.True(transport.Disposed);
+                Assert.Equal(1, transport.Requests);
+                Assert.Equal(2, logs.Results.Count);
+                Assert.Equal(2, logs.Results.Select(r => r.Job).Distinct().Count());
+                Assert.All(logs.Results, r => Assert.Equal(ExecutionResult.Cancelled, r.Result));
+            }
+            finally
+            {
+                transport.Release.TrySetResult();
+                if (disposal is not null)
+                {
+                    await disposal.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+            }
+        }
+
+        private sealed class DelayedFactory : IHttpClientFactory, IDisposable
+        {
+            public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource Cancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private int disposed;
+            private int requests;
+            public bool Disposed => Volatile.Read(ref disposed) != 0;
+            public int Requests => Volatile.Read(ref requests);
+            public HttpClient CreateClient(string name) => new(new Handler(async (_, token) =>
+            {
+                Interlocked.Increment(ref requests);
+                using var registration = token.Register(() => Cancelled.TrySetResult());
+                Entered.TrySetResult();
+                await Release.Task; // Deliberately outlive host cancellation until the test releases transport.
+                token.ThrowIfCancellationRequested();
+                return new(HttpStatusCode.OK);
+            }))
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
+            public void Dispose() => Interlocked.Exchange(ref disposed, 1);
+        }
+
+        [Fact]
+        public async Task TerminalLogDoesNotImplyKeyQuiescence()
+        {
+            using var h = new Harness();
+            h.Configure(Rule());
+            using var releaseLog = new ManualResetEventSlim();
+            var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            h.Logs.AfterTerminal = () =>
+            {
+                published.TrySetResult();
+                Assert.True(releaseLog.Wait(TimeSpan.FromSeconds(5)));
+            };
+            var factory = new Factory((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
+            try
+            {
+                Assert.True(h.Pipeline.ManualTest("rule"));
+                h.Start(factory);
+                await published.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Single(h.Logs.Results);
+                var quiescence = h.Quiesce();
+                Assert.False(quiescence.IsCompleted);
+                releaseLog.Set();
+                await quiescence;
+                Assert.Equal(1, factory.Calls);
+                Assert.Single(h.Logs.Results);
+            }
+            finally
+            {
+                releaseLog.Set();
+            }
+        }
+
+        [Fact]
+        public async Task RepeatedPauseRetainsQueuedTasksAndConcurrentResumeIsSafe()
+        {
+            var scheduler = new PausedTaskScheduler();
+            var invoked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var queued = Task.Factory.StartNew(() => invoked.TrySetResult(), CancellationToken.None,
+                TaskCreationOptions.None, scheduler);
+            scheduler.Pause(); // Already paused: replacing its gate would orphan the queued task.
+            Assert.False(invoked.Task.IsCompleted);
+            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(scheduler.Resume)));
+            await queued.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(invoked.Task.IsCompleted);
+        }
+
+        [Fact]
         public async Task FourActiveJobsAndOnePerRuleShutdownCancelsActiveAndPending()
         {
             using var h = new Harness();
@@ -652,20 +796,30 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             var active = 0;
             var peak = 0;
             var calls = 0;
+            var counters = new object();
             var factory = new Factory(async (_, token) =>
             {
-                var current = Interlocked.Increment(ref active);
-                Interlocked.Exchange(ref peak, Math.Max(peak, current));
-                if (Interlocked.Increment(ref calls) == 4)
+                lock (counters)
                 {
-                    entered.SetResult();
+                    active++;
+                    peak = Math.Max(peak, active);
+                    if (++calls == 4)
+                    {
+                        entered.SetResult();
+                    }
                 }
                 try
                 {
                     await Task.Delay(Timeout.Infinite, token);
                     return new(HttpStatusCode.OK);
                 }
-                finally { Interlocked.Decrement(ref active); }
+                finally
+                {
+                    lock (counters)
+                    {
+                        active--;
+                    }
+                }
             });
             foreach (var i in Enumerable.Range(0, 6))
             {
@@ -833,6 +987,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             pipeline.Configure(Camera, [Rule()]);
             Assert.True(pipeline.ManualTest("rule"));
             await logs.WaitForCount(1);
+            await provider.GetRequiredService<HttpActionDispatcher>().DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Contains(FakeSecret, pipeline.LastExecutions.Single().ResponseJson!);
             Assert.DoesNotContain(FakeSecret, logs.Text.ToString());
         }
@@ -879,9 +1034,19 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                     {
                         TaskScheduler = Scheduler
                     }), Logs);
-                Pipeline = new(new(History, Clock), Dispatcher, Clock);
+                Pipeline = new(new(History, Clock), Dispatcher.TrySubmit, Clock);
             }
-            public void Configure(params ActionRule[] rules) => Pipeline.Configure(Camera, rules);
+            private readonly HashSet<string> keys = new(StringComparer.Ordinal);
+            public void Configure(params ActionRule[] rules)
+            {
+                keys.UnionWith(rules.Select(r => r.Match.Id));
+                Pipeline.Configure(Camera, rules);
+            }
+            // A same-key delegate can start only after previous pipeline work quiesces.
+            // Barriers have no DispatchJob state, HTTP request or status/log publication.
+            public Task Quiesce() => Task.WhenAll(keys.Concat(Pipeline.Status.Select(s => s.RuleId)).Distinct()
+                .Select(key => Dispatcher.Scheduler.Enqueue(key, static (string _, CancellationToken token) => Task.CompletedTask)))
+                .WaitAsync(TimeSpan.FromSeconds(5));
             public void Start(IHttpClientFactory factory)
             {
                 clients.Inner = factory;
@@ -896,6 +1061,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             {
                 Start(factory);
                 await Logs.WaitForCount(awaited += count);
+                await Quiesce();
                 Scheduler.Pause();
             }
             public void Dispose()
@@ -914,11 +1080,9 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         }
         private sealed class Factory(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : IHttpClientFactory
         {
-            public int Calls
-            {
-                get; private set;
-            }
-            public HttpClient CreateClient(string name) => new(new Handler((r, t) => { Calls++; return send(r, t); })) { Timeout = Timeout.InfiniteTimeSpan };
+            private int calls;
+            public int Calls => Volatile.Read(ref calls);
+            public HttpClient CreateClient(string name) => new(new Handler((r, t) => { Interlocked.Increment(ref calls); return send(r, t); })) { Timeout = Timeout.InfiniteTimeSpan };
         }
         private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
         {
@@ -952,6 +1116,10 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         }
         private sealed class CaptureLogger : ILoggerProvider, ILogger, ILogger<HttpActionDispatcher>
         {
+            public Action? AfterTerminal
+            {
+                get; set;
+            }
             public StringBuilder Text { get; } = new();
             public System.Collections.Concurrent.ConcurrentQueue<(Guid Job, ExecutionResult Result)> Results { get; } = new();
             private TaskCompletionSource changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -979,6 +1147,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             public bool IsEnabled(LogLevel logLevel) => true;
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             {
+                var terminal = false;
                 lock (Text)
                 {
                     Text.AppendLine(formatter(state, exception));
@@ -988,10 +1157,15 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                         if (fields.GetValueOrDefault("JobId") is Guid job && fields.GetValueOrDefault("Result") is ExecutionResult result)
                         {
                             Results.Enqueue((job, result));
+                            terminal = true;
                             changed.TrySetResult();
                             changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
                         }
                     }
+                }
+                if (terminal)
+                {
+                    AfterTerminal?.Invoke();
                 }
             }
         }
