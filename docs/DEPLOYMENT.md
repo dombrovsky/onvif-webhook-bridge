@@ -1,6 +1,6 @@
-# Container deployment and release
+# Container deployment
 
-Install the published Docker Hub image using the [README Quick start](../README.md#quick-start). No checkout or build is required. The examples default to `latest`, which is not published yet; pulls will fail until the first stable release. The application is one .NET 10 NativeAOT process with embedded browser files and SQLite; it has no default password. Camera connections and webhook rules are configured **in the browser**, not through container environment variables.
+This guide describes current `main` source; published prereleases may predate its implementation contracts. Install the published Docker Hub image using the [README Quick start](../README.md#quick-start). No checkout or build is required. The examples default to `latest`, which is not published yet; pulls will fail until the first stable release. The application is one .NET 10 NativeAOT process with embedded browser files and SQLite; it has no default password. Camera connections and webhook rules are configured **in the browser**, not through container environment variables.
 
 ## First start
 
@@ -8,11 +8,42 @@ The README uses `docker run`: `onvif-bridge-data` holds the database, `onvif-bri
 
 ### Docker Compose alternative
 
-For a declarative installation, save the example below as `docker-compose.yml` in a permanent directory, or download it with:
+For a declarative installation, use Bash and curl to resolve GitHub's latest stable
+release, validate its tag and stage the matching Compose file. No stable release
+exists yet; lookup/download failures stop this block, without falling back to the
+development branch or a prerelease.
 
-```sh
-curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/dombrovsky/onvif-webhook-bridge/main/docker-compose.yml
+```bash
+(
+  release_url=$(curl --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' --max-redirs 5 \
+    --connect-timeout 10 --max-time 60 --output /dev/null \
+    --write-out '%{url_effective}' \
+    https://github.com/dombrovsky/onvif-webhook-bridge/releases/latest) || {
+    printf '%s\n' 'Cannot resolve a stable release; check availability and connectivity.' >&2
+    exit 1
+  }
+  stable_url='^https://github\.com/dombrovsky/onvif-webhook-bridge/releases/tag/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+  if [[ ! $release_url =~ $stable_url ]]; then
+    printf '%s\n' 'No valid stable release tag was resolved; installation cannot continue.' >&2
+    exit 1
+  fi
+  release_tag=${release_url##*/}
+  curl --fail --silent --show-error --location \
+    --proto '=https' --proto-redir '=https' --max-redirs 5 \
+    --connect-timeout 10 --max-time 60 --output docker-compose.yml.new \
+    "https://raw.githubusercontent.com/dombrovsky/onvif-webhook-bridge/$release_tag/docker-compose.yml" || {
+    printf '%s\n' 'Compose download failed; do not use the staged file.' >&2
+    exit 1
+  }
+  printf 'Downloaded Compose for %s to docker-compose.yml.new\n' "$release_tag"
+)
 ```
+
+Continue only on success. Review `docker-compose.yml.new`, then use
+`mv -i docker-compose.yml.new docker-compose.yml` in your installation directory.
+Existing installations should follow [upgrades](#storage-backup-upgrades-and-recovery)
+instead of overwriting their local configuration.
 
 Initialize the password volume with the README command, then run `docker compose pull` and `docker compose up -d --no-build`. No checkout or build is needed.
 
@@ -169,7 +200,7 @@ secrets:
     file: ${ONVIF_ADMIN_PASSWORD_PATH:?Set a private readable password file path}
 ```
 
-The old `ONVIF_ADMIN_PASSWORD_PATH` is only a Compose interpolation variable in that variant; the application never consumes it. Host files must be readable by container UID 1654; Compose local file secrets do not reliably remap uid/gid/mode. Restrict the parent directory as well. Keep existing deployment YAML when upgrading an older installation; downloading a replacement is unnecessary.
+The old `ONVIF_ADMIN_PASSWORD_PATH` is only a Compose interpolation variable in that variant; the application never consumes it. Host files must be readable by container UID 1654; Compose local file secrets do not reliably remap uid/gid/mode. Restrict the parent directory as well. Keep this host-file secret variant when reviewing and merging new release Compose configuration; do not silently replace it with bootstrap-volume defaults.
 
 The service runs as **1654:1654**, with read-only root, all capabilities dropped and `no-new-privileges`. `/tmp` is a disposable 32 MiB `noexec,nosuid` tmpfs. No privileged initializer, Docker socket, host network, or extra service is needed. `restart: unless-stopped` restarts exited processes unless deliberately stopped; an unhealthy status alone does not restart a container. Image health checks run every 30 seconds, timeout 5 seconds, startup allowance 20 seconds, three failures before unhealthy; disconnected cameras do not fail process health.
 
@@ -258,26 +289,44 @@ Outbound HTTPS uses normal system CA validation for both ONVIF and actions. The 
 
 Follow [the full storage/backup contract](DATA_STORAGE.md). Secrets in SQLite and backups are recoverable plaintext, protected by permissions rather than encryption. Stop the service before a filesystem backup; preserve the complete directory and sidecars. Alternatively use SQLite's online backup API to create a consistent snapshot. Never copy only a live main DB and discard WAL. Restore into a separate private correctly owned directory with the service stopped; retain the original. Start a single process on that directory and check schema, configuration, masked secrets and subscription state. Restore re-enables saved actions, so review the chosen backup before startup.
 
-For upgrades, keep a consistent backup, stop, pull a chosen image digest, then recreate with the same volume. Transactional migrations run before workers/listeners. Unsupported future schemas fail closed; binary rollback may require restoring a compatible backup. Do not use `down --volumes` for upgrades. Container recreation clears sessions, history, transitions, cooldowns, queues and execution results; stored configuration remains. No replay occurs.
+For upgrades, keep a consistent backup, stop, pull the current stable `latest` image, then recreate with the same volume. Transactional migrations run before workers/listeners. Unsupported future schemas fail closed; binary rollback may require restoring a compatible backup. Do not use `down --volumes` for upgrades. Container recreation clears sessions, history, transitions, cooldowns, queues and execution results; stored configuration remains. No replay occurs.
 
 For a Docker run upgrade:
 
 1. Run `docker stop onvif-bridge` and take the protected consistent data backup described above.
-2. Run `docker pull <chosen-image-reference>` (replace the placeholder with the verified image tag/digest).
+2. Run `docker pull dombrovskyi/onvif-webhook-bridge:latest` (or the GHCR alternative).
 3. Run `docker rm onvif-bridge` to remove only the stopped container. The named volumes remain.
-4. Repeat the README startup command with the chosen image and **the same data/bootstrap volume names**.
+4. Repeat the README startup command with `latest` and **the same data/bootstrap volume names**.
 5. Check Docker health, login, Overview version and saved configuration. Never remove the data volume during an upgrade.
 
-For a published-image Compose upgrade, retain your installation directory, project name, Compose file and both volumes. After stopping and backing up the complete data volume, set `ONVIF_IMAGE` in `.env` to the selected verified tag or digest, then run:
+For an upgrade, keep `ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridge:latest` in `.env`
+(or the GHCR alternative above):
+
+1. Take a consistent protected data backup and save copies of your Compose file and local overrides in private storage. Keep the existing installation directory, project name, `.env` and administrator password file.
+2. In that directory, run **only the parenthesized release-download Bash block** from the [Compose alternative](#docker-compose-alternative). It resolves the current latest stable tag and writes `docker-compose.yml.new`; it does not change the active Compose file, `.env`, password file or volume. Do not reinitialize the bootstrap volume or recreate `.env`. Stop if the block fails, even if an earlier staged file exists.
+3. Compare `docker-compose.yml` with `docker-compose.yml.new` and review the release notes. Merge any local base-file edits into the candidate deliberately. Keep local overrides and check their compatibility with the new base; do not silently replace custom configuration. Review the new volume mappings and ensure they still select your existing named data volume.
+4. After review, back up the active Compose file and promote the candidate. The commands below prompt before overwriting an existing backup or active file. Validate using the same override files/options you normally use, then pull and recreate. Automatic Compose overrides in the installation directory remain in place; if you normally specify `-f` options, retain them for every Compose command.
+
+```sh
+cp -ip docker-compose.yml docker-compose.yml.previous
+mv -i docker-compose.yml.new docker-compose.yml
+docker compose config --quiet
+```
+
+Continue only if validation succeeds and the resolved settings preserve your data
+volume, ports, secret path and local overrides. Otherwise restore the previous file
+and correct the configuration before pulling or recreating:
 
 ```sh
 docker compose pull
+docker compose stop bridge
 docker compose up -d --no-build
 docker compose ps
-docker compose run --rm --no-deps bridge --version
 ```
 
-Confirm health, login and saved configuration before considering the upgrade complete. A forced recreation of the same image is a safe persistence rehearsal, not proof of compatibility with a future schema. Never use `down --volumes`, delete the volume, or change project names as part of an upgrade.
+Do not edit or recreate `.env` or the password file during this procedure. If a new
+stable release appears between resolution and pulling `latest`, repeat the download
+and review so the Compose file and image follow the same release.
 
 ## Network diagnosis and mappings
 
@@ -287,126 +336,15 @@ Use Events to discover exact topics and Source/Data values, including false and 
 
 Cooldown starts on bounded queue admission and delivery failure consumes it. Rejected/suppressed work is not replayed. Retries default to zero and can duplicate effects even for GET; at most two additional attempts and the existing deadlines/queue/revision checks apply. Manual tests perform actual external actions; use only an explicitly intended destination. A 2xx response proves transport acceptance only. See [browser usage](BROWSER_ADMINISTRATION.md) and [matching and delivery](BROWSER_ADMINISTRATION.md#matching-and-delivery).
 
-## Platforms, CI and releases
+## Platforms and maintainer references
 
-Images target linux/amd64 and linux/arm64. Native CI runners build and execute each target. Local amd64-to-arm64 cross-compilation uses emulation and must be labelled separately. ARMv7 is unsupported until toolchain/native assets and hardware smoke tests are established; Linux 32-bit x86 is unsupported. Check the actual deployment host's architecture, Linux container capability, volume ownership, routing and TLS trust. Simulator/recorder tests cannot establish camera transitions, physical reboot/outage recovery or real destination effects.
+Images target `linux/amd64` and `linux/arm64`; ARMv7 and Linux 32-bit x86 are
+unsupported. Check the actual host's architecture, storage, routing and TLS trust.
+Native CI, local emulation and physical-device interoperability are separate evidence.
+See [development validation](DEVELOPMENT.md#validation) for repeatable checks and
+[releasing](RELEASING.md) for versioning, CI publishing and release recovery.
 
-[`ci.yml`](../.github/workflows/ci.yml) uses native amd64/arm64 runners for full JIT tests, actual onvifsim, NativeAOT execution and production deployment tests. PRs need no registry credentials and have contents-read permissions only. The manually dispatched `Release` workflow in `images.yml` reuses that entire gate for the selected revision, then publishes its tested artifacts. Release runs share one concurrency group without cancellation; GitHub may replace an older pending run with a newer pending run, so avoid queuing several releases. Only the final publishing job receives contents-write and packages-write permission. See [GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency). Publication requires explicit maintainer authorization and verification of registry access/manifests.
+## Recovering a failed release
 
-Dependencies retain their existing exact package pins; SDK/runtime manifest digests and Dockerfile frontend are pinned, as are Actions commit SHAs with reviewed tag comments. OS apt security packages are resolved at build time, so builds are not byte reproducible. To upgrade, inspect official manifests/source/release notes, update pins intentionally, rerun all targets including SQLite/TLS/auth/browser/simulator paths and inspect the resulting manifest before releasing. Native platform builds and manifest assembly follow [Docker's multi-platform guidance](https://docs.docker.com/build/ci/github-actions/multi-platform/); see [NativeAOT cross-compilation constraints](https://learn.microsoft.com/dotnet/core/deploying/native-aot/cross-compile). Do not broaden platform claims based on available base images alone.
-
-## Repeating local verification
-
-Requires PowerShell 7, .NET 10, a Linux Docker engine, the pinned simulator image (`tests/Build-OnvifSimulator.ps1`) and Node for the HTTPS client. The production browser walkthrough additionally needs an external Playwright module/browser; the application itself has no Node dependency. Build the native fixture first so its local HTTP/TLS recorder image is available:
-
-The deployment soak requires recorder delivery from each camera on every cycle, alongside subscription and process health checks. Compose verification copies only YAML to an isolated directory, initializes a private password volume, checks health/UI/login, persists a disabled synthetic camera through recreation, checks password replacement through old/new login results and restores inherited environment values. It does not import the operator's `.env`.
-
-```powershell
-./tests/Verify-Phase7Native.ps1 -Platform linux/amd64
-docker build --platform linux/amd64 -t onvif-webhook-bridge:local .
-./tests/Verify-Deployment.ps1 -Image onvif-webhook-bridge:local -Platform linux/amd64 -SoakSeconds 600
-./tests/Verify-Compose.ps1 -Image onvif-webhook-bridge:local
-./tests/Verify-InboundTls.ps1 -Image onvif-webhook-bridge:local -Platform linux/amd64
-./tests/Verify-Workflows.ps1
-./tests/Verify-ImageIndex.ps1 -Build
-```
-
-For local ARM64 emulation on an amd64 builder, run the native fixture with `-Platform linux/arm64 -CrossCompile`, build the production image with `--platform linux/arm64`, and use that platform/image for deployment and inbound TLS verification. Keep separate image tags for each local target. Report emulation explicitly; native ARM64 hardware, real device mappings/outages and deployment-host interoperability remain independent gates. The index runner builds only a local ignored OCI archive and never publishes it. Docker runners remove their own uniquely named fixtures/volumes, preserving unrelated resources; ignored source staging and local images remain cached.
-
-The README Docker run smoke test extracts the startup command from the README, substitutes isolated names/port, and tests whitespace-password login, health, runtime restrictions, persistence after container removal/recreation, and the documented offline reset. It requires PowerShell 7 and Docker, without a build:
-
-```powershell
-./tests/Verify-DockerRun.ps1 -Pull
-```
-
-To repeat the source-free published-image check without building (PowerShell 7 and a Linux Docker engine):
-
-```powershell
-./tests/Verify-Compose.ps1 -Pull
-```
-
-These checks default to `latest` and require it to exist. To verify a specific published release instead, pass `-Image <repository:version> -ExpectedVersion <version> -ExpectedDigest <sha256:index-digest>` using that release's actual values. The Compose runner pulls/executes AMD64. Pass `-PlaywrightModule <absolute-module-path>` to additionally test browser login and the persisted camera screen (Node plus Edge, or set `ONVIF_BROWSER_CHANNEL=chromium` with Chromium installed). CI runs this same Compose smoke against its candidate image on native AMD64/ARM64, with the browser check on AMD64; it does not pull a public release as a PR prerequisite.
-
-### Docker Hub overview
-
-[`DOCKER_HUB.md`](DOCKER_HUB.md) is the checked-in source for Docker Hub's repository overview. After review/merge, a Docker Hub maintainer should copy its Markdown into the repository overview editor. Image publication does not synchronize that text. Keep the Quick start/version aligned with the README when updating it.
-
-## Public release readiness
-
-Before publishing a release:
-
-- Review the exact revision's [native AMD64/ARM64 CI results](../.github/workflows/ci.yml), tag protections and registry permissions. Keep device/host/destination limitations explicit; a past test result is not verification of a newer revision.
-- Enable and verify private vulnerability reporting for a public repository; follow the [security policy](../SECURITY.md). Do not change visibility as an incidental test.
-- Audit tracked files and relevant history for secrets and device/setup identities. Use a secret scanner plus manual review; automated scanning cannot certify inaccessible copies or detect every secret. Keep raw findings private. Do not rewrite history or publish artifacts without authorization.
-- Keep the [UI screenshots](BROWSER_ADMINISTRATION.md#screenshots) aligned with the interface and use synthetic data without addresses, credentials or identifying payloads.
-- Verify the intended image version/digest and both platform manifests. `ONVIF_IMAGE` selects the Compose image; published installations use `docker compose pull` and `docker compose up -d --no-build`. Retain password-file, volume ownership and bind defaults.
-
-## Publishing a release
-
-### Version source and workflow
-
-`Directory.Build.props` is the only version definition: `VersionPrefix` is the three-number version and `VersionSuffix` is `rc.$(RcNumber)` or empty for stable. `RcNumber` uses GitHub Actions `GITHUB_RUN_NUMBER`, with local fallback `1`. Each new run increments the counter for that workflow; reruns retain the number, counters do not reset for a new prefix, and Verify and Release have separate counters. The reusable release verification uses its caller's counter. Docker receives the same counter as a build argument. `Version` and `InformationalVersion` combine them; `AssemblyVersion` and `FileVersion` remain numeric (`0.1.0.0` for all 0.1.0 candidates). The SDK's existing deterministic/CI and built-in SourceLink settings remain enabled; no additional SourceLink package is needed. The SDK may append the commit to informational metadata. The executable's exact `--version` command and authenticated session response remove that provenance suffix; Overview displays `v` plus that compiled version. `--version` needs neither administrator credentials nor storage and does not start the server.
-
-Versions use SemVer without a leading `v`. Numeric prerelease identifiers cannot have leading zeroes. Build metadata (`+...`) is deliberately excluded from source release versions because Docker tags cannot represent it; provenance uses the separate revision label and informational metadata. Core components must fit numeric .NET assembly metadata (0..65534), and image tags are limited to 128 characters. Git tags and GitHub Release titles add `v`; image tags and product versions do not.
-
-Version changes go through a small reviewed PR. The release workflow reads the prefix/suffix from `Directory.Build.props` at the selected commit; there is no version input in Actions. That derived version is passed unchanged to verification and publication and checked against the source again before registry writes. To reproduce a tagged candidate locally, set `GITHUB_RUN_NUMBER` to the candidate number and pass `--build-arg GITHUB_RUN_NUMBER=<N>` to Docker. Only prefix changes and switching to stable need a version PR; new candidates use the workflow counter. Do not change version literals in fixtures: they are synthetic test scenarios.
-
-### One-time maintainer setup
-
-1. Protect `main` with a branch rule/ruleset requiring reviewed PRs and the existing native verification checks. The workflow rejects an unprotected main branch. Allow native `ubuntu-24.04` and `ubuntu-24.04-arm` runners.
-2. Configure tag rules for `v*` that prevent updates and deletion. Allow the workflow to **create** tags, without permitting force updates. Enable GitHub immutable releases where available. Avoid other publishers that can race this workflow or mutate its version tags.
-3. Create a Docker Hub repository named `onvif-webhook-bridge` in the desired namespace. Choose visibility deliberately; the workflow never changes it. Set repository Actions variable **`DOCKERHUB_NAMESPACE`** to that user/organization namespace. The account used for authentication may differ from the organization namespace.
-4. Set repository Actions secrets **`DOCKERHUB_USERNAME`** and **`DOCKERHUB_TOKEN`**. Use a Docker Hub access token with read/write access to this repository only where supported, without delete permission. The read-only preflight job needs these secrets too, so do not store them solely in the release environment. Enable immutable version tags in Docker Hub where available, excluding `latest`.
-5. Allow `GITHUB_TOKEN` to read contents for verification, and write contents/packages in the publisher. No PAT is required. If a GHCR package already exists, link it to this repository and grant this repository's Actions access. Private packages/images require authorized pulls; do not make the repository or package public as a side effect of setup.
-6. Create a GitHub environment named **`release`**, limited to `main`. Optionally require a reviewer approval (subject to the repository's GitHub plan). Approval occurs after the full verification gate and before publication. Do not add camera/destination credentials to release jobs. The publisher's `contents: write` permission is needed to create the exact-commit tag and draft/final Release; `packages: write` is used for GHCR.
-
-Actions are official actions pinned to existing reviewed commit SHAs. The publisher installs the distribution's Skopeo package to copy an OCI layout without rebuilding. Authentication comes from the login actions' ephemeral Docker configuration; credentials are never command arguments or release assets. Login post-steps remove that configuration.
-
-### GitHub UI procedure
-
-After completing setup:
-
-1. Merge the desired version-bump PR into `main`. Copy the **full 40-character SHA** of the main commit you intend to release from GitHub's commit page. The selected commit must be an ancestor of current protected main and contain this release implementation.
-2. Open **Actions → Release → Run workflow**. Leave the branch selector on **main**. Enter the copied revision SHA, then run it. The workflow reads the version from that revision's `Directory.Build.props` and shows it in the run summary. The workflow refuses feature-branch dispatches, non-main revisions, source/version mismatches, existing tags/releases/drafts, and existing version tags in either registry. Authentication/network errors do not count as an available version.
-3. Wait for the existing full native AMD64 and ARM64 suite. If configured, approve the `release` environment only after reviewing those checks.
-4. A successful run publishes both multi-architecture image tags, verifies their exact digests/configurations, moves stable aliases when appropriate, and finalizes the GitHub Release. Follow its installation links and digest references. Do not manually create a release tag first.
-
-| Intended release | VersionPrefix | VersionSuffix | Automatically resolved version | GitHub tag/type | Image tags in both registries |
-| --- | --- | --- | --- | --- | --- |
-| Release run 42 | `0.1.0` | `rc.$(RcNumber)` | `0.1.0-rc.42` | `v0.1.0-rc.42`, prerelease | `0.1.0-rc.42` only |
-| Release run 43 | `0.1.0` | `rc.$(RcNumber)` | `0.1.0-rc.43` | `v0.1.0-rc.43`, prerelease | `0.1.0-rc.43` only |
-| Stable | `0.1.0` | empty | `0.1.0` | `v0.1.0`, stable | `0.1.0`, then `latest` |
-
-For `0.2.0` or `1.0.0`, bump the prefix and leave the suffix empty. Candidate runs can reuse the same merged SHA; stable releases require the merged empty-suffix change. The release workflow creates no automatic version-bump commit or PR. Use the normal main-branch CI before release; the release also repeats that same reusable gate with the chosen immutable SHA and source version.
-
-### Images, installation and upgrades
-
-Images are published to both Docker Hub and GHCR with the same tested content and multi-architecture index:
-
-- Docker Hub (default): `dombrovskyi/onvif-webhook-bridge:<version>`
-- GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:<version>`
-
-Runnable architectures are exactly `linux/amd64` and `linux/arm64`. There are no public platform-specific moving aliases or minor/major aliases. Prereleases never touch `latest` or GitHub's latest stable designation. Stable releases update `latest` in both registries only after both immutable version manifests pass verification. Prefer explicit version tags or the index digest in the GitHub Release over `latest` for controlled upgrades.
-
-Public registry pulls need no credentials. If an operator deliberately uses a private mirror, authenticate to that registry separately. Use the [configuration reference](#configuration-reference) for image selection and [upgrade procedure](#storage-backup-upgrades-and-recovery) to retain storage. Local image builds and OCI labels are covered in [development](DEVELOPMENT.md#local-container-builds).
-
-### Artifact verification and deliberate limits
-
-The reusable CI gate retains the existing simulator, tests, NativeAOT smoke, browser, Compose, TLS, deployment and soak checks on native runners. Its checkout is the selected SHA. Before export on each runner, the final production image must report the expected compiled version using `--version` without network, writable root, capabilities or administrator setup. Its architecture and OCI version/source/exact revision/MIT license labels must match. CI records the tested Docker config ID, archive SHA-256, binary version and commit alongside each saved image.
-
-The publisher downloads only those artifacts from the **same workflow run**. It checks archive hashes and evidence, converts them once into a local OCI layout, checks the original tested config digests, validates labels again, and assembles exactly two runnable platform descriptors. Docker schema-2 platform configs are retained so conversion cannot strip the tested Docker health check. Skopeo copies that same layout to both registries using `--all --preserve-digests`; no application/image rebuild happens after tests. It reads back each registry's index and platform manifests, checks their SHA-256 digests and labels against the local evidence, and checks the exact release tag target before finalization. Generated notes include pinned image digests and setup links. The attached `release.json` records source, index/platform digests and tested-artifact hashes. Workflow evidence is retained for 90 days; tested image archives for 7 days.
-
-A draft Release is created after verification and version reservation, before registry writes. It becomes public as a successful release only after both registries (and stable aliases, if any) pass verification. The workflow checks the final prerelease/draft state. There is no atomic transaction across GitHub and two registries: an intermediate failure is explicitly incomplete, leaves its draft unpublished, and may leave one registry/tag or one stable alias updated. See recovery below.
-
-Standalone binary downloads are deferred: Docker remains the supported runtime contract, including OS dependencies, permissions and TLS assets. A bare NativeAOT executable does not carry that contract. Adding separate archive/runtime-support verification would add maintenance beyond this release path. No second binary is rebuilt for release assets. SBOMs, vulnerability scanners, Gitleaks in hosted release CI and attestations are also deferred; adding them later should include reviewed tool pins, base-image severity/suppression policy and explicit verification rather than unreliable default release blockers. Local secret review remains part of the implementation handoff.
-
-### Recovering a failed release
-
-Inspect the first failed step, the workflow summary, preserved `release-evidence`, the GitHub tag/draft, and **both registries**. A failed workflow is not a successful release even if one version tag is visible in a registry. Do not advertise a draft or manually finalize it after a failed verification.
-
-- **Before tag reservation:** after fixing setup/transient errors, rerun using the same version/revision if no tag, draft, or registry version exists. Verification is rerun; expired CI artifacts cannot be silently substituted.
-- **After tag reservation or any publication:** the version is consumed. Keep its tag/draft/evidence for diagnosis; never move/recreate the tag, overwrite assets/images, or use a rerun to repair it. Fix the problem through a PR, choose a new unused version (for example `0.1.0-rc.2` after a failed `rc.1`, or the next patch after a failed stable version), then start a new workflow run for that revision (a rerun keeps the consumed number). Any existing tag, draft, or version image causes the preflight to reject reuse, including a same-commit retry.
-- **Stable alias failure:** versioned images may both be valid while only one `latest` moved. Treat the release as incomplete; use a known successful pinned digest while preparing the next stable version. Prereleases cannot repair/move stable aliases. Publication of that next verified stable version reconciles both aliases.
-- **Failure after finalization:** inspect the actual Release state and digest evidence. A final state-check/API connection failure can leave an already published Release. Never rerun to overwrite it. Confirm its tag, both manifests and prerelease flag before treating it as successful; fix any issue with a new version.
-
-Repository permissions/rules and registry immutability settings should prevent out-of-band mutations. Preflight collision checks plus serialized workflow writes cannot defend against an unrelated publisher with unrestricted concurrent write credentials. Do not run another publisher for these version tags.
+Maintainers: see [release recovery](RELEASING.md#recovering-a-failed-release).
+This anchor remains for messages emitted by the existing Release workflow.
