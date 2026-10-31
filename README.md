@@ -33,12 +33,12 @@ Add camera device-service URLs explicitly. The bridge discovers each camera's ev
 
 ## Quick start
 
-You need Docker with Linux containers on AMD64 or ARM64. These commands use published **0.1.0-rc.3** (a prerelease); no Compose, checkout, or build is needed. Run them in a terminal on the Docker host.
+You need Docker with Linux containers on AMD64 or ARM64. These commands use the **latest stable Docker Hub image**; no Compose, checkout, or build is needed. Run them in a terminal on the Docker host.
 
 Create the private password file in a Docker volume. Enter a unique password of 12–4096 characters at the hidden prompt; remember it for login:
 
 ```sh
-docker run --rm -it --mount type=volume,src=onvif-bridge-bootstrap,dst=/data --entrypoint /bin/bash dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3 -c 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
+docker run --rm -it --mount type=volume,src=onvif-bridge-bootstrap,dst=/data --entrypoint /bin/bash dombrovskyi/onvif-webhook-bridge:latest -c 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
 ```
 
 Start the application with persistent storage:
@@ -54,7 +54,7 @@ docker run -d --name onvif-bridge \
   --tmpfs /tmp:rw,noexec,nosuid,size=32m,mode=1777 \
   --env ONVIF_ADMIN_USERNAME=admin \
   --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password \
-  dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3
+  dombrovskyi/onvif-webhook-bridge:latest
 docker ps --filter name=onvif-bridge
 ```
 
@@ -62,9 +62,9 @@ Open [http://localhost:8080](http://localhost:8080) on the Docker host and log i
 
 For multiple independent installations, use distinct container names, data volumes, bootstrap volumes and host ports; update the bootstrap name in both commands. See [deployment guidance](docs/DEPLOYMENT.md#multiple-independent-installations).
 
-For GHCR, replace the image in both commands with `ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.3`. For Compose, see the [Compose example and configuration reference](docs/DEPLOYMENT.md#docker-compose-alternative), plus [upgrades and recovery](docs/DEPLOYMENT.md#storage-backup-upgrades-and-recovery). Local builds are covered in [development](docs/DEVELOPMENT.md#local-container-builds).
+For GHCR, replace the image in both commands with `ghcr.io/dombrovsky/onvif-webhook-bridge:latest`. For Compose, see the [Compose example and configuration reference](docs/DEPLOYMENT.md#docker-compose-alternative), plus [upgrades and recovery](docs/DEPLOYMENT.md#storage-backup-upgrades-and-recovery). Local builds are covered in [development](docs/DEVELOPMENT.md#local-container-builds).
 
-After the first stable release, you can use `dombrovskyi/onvif-webhook-bridge:latest` (or the GHCR equivalent). **`latest` is not available yet**; prereleases never create or update it. The release workflow updates it in both registries only for non-prerelease releases.
+**Release availability:** `latest` is not published yet, so these commands will fail to pull until the first stable release is published. The release workflow creates/updates `latest` in both registries only for non-prerelease releases.
 
 ### Forward your first event
 

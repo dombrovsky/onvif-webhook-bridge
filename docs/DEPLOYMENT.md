@@ -1,6 +1,6 @@
 # Container deployment and release
 
-Install the published Docker Hub image using the [README Quick start](../README.md#quick-start). No checkout or build is required. The application is one .NET 10 NativeAOT process with embedded browser files and SQLite; it has no default password. Camera connections and webhook rules are configured **in the browser**, not through container environment variables.
+Install the published Docker Hub image using the [README Quick start](../README.md#quick-start). No checkout or build is required. The examples default to `latest`, which is not published yet; pulls will fail until the first stable release. The application is one .NET 10 NativeAOT process with embedded browser files and SQLite; it has no default password. Camera connections and webhook rules are configured **in the browser**, not through container environment variables.
 
 ## First start
 
@@ -21,7 +21,7 @@ The shipped file has no `build:` section. You can also paste this example into C
 ```yaml
 services:
   bridge:
-    image: ${ONVIF_IMAGE:-dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3}
+    image: ${ONVIF_IMAGE:-dombrovskyi/onvif-webhook-bridge:latest}
     restart: unless-stopped
     user: "1654:1654"
     read_only: true
@@ -58,7 +58,7 @@ Start with `docker compose pull`, `docker compose up -d --no-build`, then `docke
 For Docker run installations, stop `onvif-bridge`, back up its data, rerun the password command, then reset with:
 
 ```sh
-docker run --rm --network none --user 1654:1654 --read-only --cap-drop ALL --security-opt no-new-privileges:true --mount type=volume,src=onvif-bridge-data,dst=/data --mount type=volume,src=onvif-bridge-bootstrap,dst=/run/bootstrap,readonly --env ONVIF_ADMIN_USERNAME=admin --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3 --reset-administrator
+docker run --rm --network none --user 1654:1654 --read-only --cap-drop ALL --security-opt no-new-privileges:true --mount type=volume,src=onvif-bridge-data,dst=/data --mount type=volume,src=onvif-bridge-bootstrap,dst=/run/bootstrap,readonly --env ONVIF_ADMIN_USERNAME=admin --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password dombrovskyi/onvif-webhook-bridge:latest --reset-administrator
 ```
 
 Require exit zero before `docker start onvif-bridge`. For an explicit offline reset with Compose, stop the bridge and take a protected consistent backup first. Run the interactive password command again using the **same bootstrap volume**, then `docker compose run --rm --no-deps bridge --reset-administrator`. Require exit zero before `docker compose up -d --no-build`. Cameras, rules and revisions are preserved; see [administrator policy](ADMINISTRATION.md).
@@ -122,7 +122,7 @@ Compose reads interpolation values from the shell or local `.env` (shell wins). 
 
 | Compose variable | Default | Status and valid values / interaction |
 | --- | --- | --- |
-| `ONVIF_IMAGE` | `dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3` | Optional image reference; use a verified version or `repository@sha256:…` digest. GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.3`. Version tags omit `v`. After the first stable release, `dombrovskyi/onvif-webhook-bridge:latest` or `ghcr.io/dombrovsky/onvif-webhook-bridge:latest` tracks stable releases. No `latest` exists yet; prereleases never create/update it. |
+| `ONVIF_IMAGE` | `dombrovskyi/onvif-webhook-bridge:latest` | Optional image reference; use a verified version or `repository@sha256:…` digest. GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:latest`. Version tags omit `v`. After the first stable release, `dombrovskyi/onvif-webhook-bridge:latest` or `ghcr.io/dombrovsky/onvif-webhook-bridge:latest` tracks stable releases. No `latest` exists yet; prereleases never create/update it. |
 | `ONVIF_ADMIN_USERNAME` | `admin` | Bootstrap/reset only; nonblank, maximum 256 UTF-16 units. Compose passes this into the application. |
 | `ONVIF_BOOTSTRAP_VOLUME` | `onvif-bridge-bootstrap` | Optional external Docker volume name; must already contain `administrator-password`, created as above. Use a distinct name for each independent installation. |
 | `ONVIF_BIND_ADDRESS` | `127.0.0.1` | Optional host bind address; retain loopback for tunnels. LAN/all-interface binds require deliberate HTTPS/network configuration. |
@@ -209,7 +209,7 @@ docker compose -p onvif-nas-test run --rm --no-deps bridge --version
 docker inspect --format '{{.Image}} {{.Config.Image}}' "$(docker compose -p onvif-nas-test ps -q bridge)"
 ```
 
-Tunnel workstation port 18080 to NAS loopback **18081**, log in and verify Overview version. Add a **disabled synthetic** camera named `Synthetic persistence check`, endpoint `http://camera.example/onvif/device_service` (no connection/test), then recreate using `docker compose -p onvif-nas-test up -d --no-build --force-recreate`. Log in again and confirm it remains. Check health and volume mounts using `docker inspect`; compare the image ID with `docker image inspect dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3`. Do not test real cameras or destinations without separate authorization. Startup/network creation and authenticated local HTTP are covered here; actual camera routing remains a separate test.
+Tunnel workstation port 18080 to NAS loopback **18081**, log in and verify Overview version. Add a **disabled synthetic** camera named `Synthetic persistence check`, endpoint `http://camera.example/onvif/device_service` (no connection/test), then recreate using `docker compose -p onvif-nas-test up -d --no-build --force-recreate`. Log in again and confirm it remains. Check health and volume mounts using `docker inspect`; compare the image ID with `docker image inspect dombrovskyi/onvif-webhook-bridge:latest`. Do not test real cameras or destinations without separate authorization. Startup/network creation and authenticated local HTTP are covered here; actual camera routing remains a separate test.
 
 Stop only this test with `docker compose -p onvif-nas-test down` when finished. This preserves its volumes. Remove test data only after verifying the exact test volume names; leave production containers/networks/volumes untouched. NAS interoperability must be reported separately from local Docker tests.
 
@@ -316,16 +316,16 @@ For local ARM64 emulation on an amd64 builder, run the native fixture with `-Pla
 The README Docker run smoke test extracts the startup command from the README, substitutes isolated names/port, and tests whitespace-password login, health, runtime restrictions, persistence after container removal/recreation, and the documented offline reset. It requires PowerShell 7 and Docker, without a build:
 
 ```powershell
-./tests/Verify-DockerRun.ps1 -Pull -ExpectedVersion 0.1.0-rc.3 -ExpectedDigest sha256:4e22efec10be648348e399e00e6c83165da52075a9079170513c094f35e3be46
+./tests/Verify-DockerRun.ps1 -Pull
 ```
 
 To repeat the source-free published-image check without building (PowerShell 7 and a Linux Docker engine):
 
 ```powershell
-./tests/Verify-Compose.ps1 -Pull -ExpectedVersion 0.1.0-rc.3 -ExpectedDigest sha256:4e22efec10be648348e399e00e6c83165da52075a9079170513c094f35e3be46
+./tests/Verify-Compose.ps1 -Pull
 ```
 
-The digest is the verified multi-platform index for `0.1.0-rc.3` in both registries; the runner pulls/executes AMD64. Pass `-PlaywrightModule <absolute-module-path>` to additionally test browser login and the persisted camera screen (Node plus Edge, or set `ONVIF_BROWSER_CHANNEL=chromium` with Chromium installed). CI runs this same Compose smoke against its candidate image on native AMD64/ARM64, with the browser check on AMD64; it does not pull a public release as a PR prerequisite.
+These checks default to `latest` and require it to exist. To verify a specific published release instead, pass `-Image <repository:version> -ExpectedVersion <version> -ExpectedDigest <sha256:index-digest>` using that release's actual values. The Compose runner pulls/executes AMD64. Pass `-PlaywrightModule <absolute-module-path>` to additionally test browser login and the persisted camera screen (Node plus Edge, or set `ONVIF_BROWSER_CHANNEL=chromium` with Chromium installed). CI runs this same Compose smoke against its candidate image on native AMD64/ARM64, with the browser check on AMD64; it does not pull a public release as a PR prerequisite.
 
 ### Docker Hub overview
 

@@ -4,12 +4,12 @@ Turn ONVIF IP camera events into HTTP webhooks. One self-hosted NativeAOT applic
 
 ## Install with Docker
 
-Linux **AMD64** and **ARM64** images are available. Version **0.1.0-rc.3** is a prerelease. No Compose, clone or local build is needed.
+Linux **AMD64** and **ARM64** images are available. The examples use the **latest stable image**. No Compose, clone or local build is needed.
 
 Create a private file-backed password in a Docker volume (hidden prompt, 12–4096 characters). No host sudo or UID changes are needed:
 
 ```sh
-docker run --rm -it --mount type=volume,src=onvif-bridge-bootstrap,dst=/data --entrypoint /bin/bash dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3 -c 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
+docker run --rm -it --mount type=volume,src=onvif-bridge-bootstrap,dst=/data --entrypoint /bin/bash dombrovskyi/onvif-webhook-bridge:latest -c 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
 ```
 
 Start the application:
@@ -25,7 +25,7 @@ docker run -d --name onvif-bridge \
   --tmpfs /tmp:rw,noexec,nosuid,size=32m,mode=1777 \
   --env ONVIF_ADMIN_USERNAME=admin \
   --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password \
-  dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3
+  dombrovskyi/onvif-webhook-bridge:latest
 docker ps --filter name=onvif-bridge
 ```
 
@@ -37,7 +37,7 @@ The service runs as UID/GID **1654:1654** with a read-only root filesystem. Dock
 
 ## Versions and upgrades
 
-Pin a version tag (without `v`) or a digest. GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.3`. Replace the image in both commands to select another registry/version. After the first stable release, `dombrovskyi/onvif-webhook-bridge:latest` selects the current stable image. `latest` is not currently published; prereleases never create or update it.
+Pin a version tag (without `v`) or a digest. GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:latest`. Replace the image in both commands to select another registry/version. `latest` selects the current stable image. It is not published yet, so the installation commands will fail to pull until the first stable release. Prereleases never create or update it.
 
 Stop and securely back up the complete data volume before upgrading. Pull the chosen image, remove only the stopped container, then repeat the startup command with the new image and the **same volume names**. Verify health, login, Overview version and saved configuration. [Full Docker run/Compose upgrade, backup and recovery procedures](https://github.com/dombrovsky/onvif-webhook-bridge/blob/main/docs/DEPLOYMENT.md#storage-backup-upgrades-and-recovery).
 

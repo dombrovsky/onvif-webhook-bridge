@@ -1,6 +1,6 @@
 services:
   bridge:
-    image: ${ONVIF_IMAGE:-dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3}
+    image: ${ONVIF_IMAGE:-dombrovskyi/onvif-webhook-bridge:latest}
     restart: unless-stopped
     user: "1654:1654"
     read_only: true

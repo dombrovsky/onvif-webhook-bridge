@@ -1,7 +1,7 @@
 # Test the shipped published-image installation from a directory containing only YAML.
 # -Pull tests the real registry image; CI may pass its locally verified image instead.
 param(
-    [string]$Image = 'dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3',
+    [string]$Image = 'dombrovskyi/onvif-webhook-bridge:latest',
     [switch]$Pull,
     [string]$ExpectedVersion,
     [string]$ExpectedDigest,
