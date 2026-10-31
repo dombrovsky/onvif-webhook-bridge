@@ -14,6 +14,13 @@ There is one administrator account and no multi-user/RBAC model. Keep deployment
 
 ## Reporting a vulnerability
 
-Do not disclose an unpatched vulnerability, credentials or private captures in a public issue. If the repository's **Security → Report a vulnerability** option is available, use it for a private report. GitHub [supports private vulnerability reporting for public repositories](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository). Maintainers should enable and test private vulnerability reporting for a public repository. Until a private channel is available, open an issue asking the maintainer for a private reporting method without including exploit or sensitive details.
+Do not disclose an unpatched vulnerability, credentials or private captures in a public
+issue. Use the repository's **Security → Report a vulnerability** option if available:
+[private vulnerability reporting](https://github.com/dombrovsky/onvif-webhook-bridge/security/advisories/new).
+If it is unavailable, open an issue asking for a private reporting method, without
+exploit or sensitive details. No security contact email or response-time commitment
+is published.
 
-Provide affected revisions, a sanitized description and reproduction steps through the agreed private channel. Never submit a real configuration database, password file or unsanitized SOAP capture.
+Provide affected revisions, a sanitized description and reproduction steps through
+the private channel. Never submit a real configuration database, password file or
+unsanitized SOAP capture.
