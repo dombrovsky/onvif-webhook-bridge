@@ -35,6 +35,18 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.source_version(xml)
 
+    def test_candidate_counter_and_local_fallback(self):
+        xml = "<Project><VersionPrefix>0.1.0</VersionPrefix><VersionSuffix>rc.$(RcNumber)</VersionSuffix></Project>"
+        for number, expected in (("", "1"), ("42", "42"), ("43", "43")):
+            with patch.dict(os.environ, GITHUB_RUN_NUMBER=number):
+                self.assertEqual("0.1.0-rc." + expected, release.source_version(xml))
+                with patch.object(release, "run", return_value=xml.encode()):
+                    self.assertEqual("0.1.0-rc." + expected, release.revision_version(SHA))
+                self.assertEqual("1.0.0", release.source_version("<Project><VersionPrefix>1.0.0</VersionPrefix><VersionSuffix /></Project>"))
+        for number in ("0", "01", "-1", "bad"):
+            with patch.dict(os.environ, GITHUB_RUN_NUMBER=number), self.assertRaises(ValueError):
+                release.source_version(xml)
+
     def test_registry_absence_fails_closed(self):
         for message in ("unauthorized", "denied", "timeout", "404 gateway error"):
             with patch.object(release, "run", side_effect=RuntimeError(message)), self.assertRaises(ValueError):
