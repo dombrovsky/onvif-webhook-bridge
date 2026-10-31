@@ -235,6 +235,12 @@ class ReleaseTests(unittest.TestCase):
         copies = [e[-1] for e in events if e[:2] == ("skopeo", "copy")]
         self.assertEqual([":0.1.0", ":0.1.0", ":latest", ":latest"], [":" + e.rsplit(":", 1)[1] for e in copies])
         self.assertEqual("true", events[-1][1]["make_latest"])
+        alias_copies = [e for e in events if e[:2] == ("skopeo", "copy") and e[-1].endswith(":latest")]
+        self.assertEqual(["docker://ghcr.io/dombrovsky/onvif-webhook-bridge:latest", "docker://docker.io/synthetic/onvif-webhook-bridge:latest"], [e[-1] for e in alias_copies])
+        for copy in alias_copies:
+            self.assertIn("--all", copy)
+            self.assertIn("--preserve-digests", copy)
+            self.assertTrue(copy[-2].endswith("@sha256:" + "c" * 64))
 
     def test_second_registry_failure_keeps_draft_and_aliases_untouched(self):
         events = self.scenario("0.1.0", "docker.io/synthetic")

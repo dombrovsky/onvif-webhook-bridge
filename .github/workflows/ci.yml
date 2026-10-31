@@ -65,7 +65,8 @@ jobs:
         run: |
           $browser = if ('${{ matrix.arch }}' -eq 'amd64') { "$PWD/.local/browser/node_modules/playwright" } else { '' }
           ./tests/Verify-Deployment.ps1 -Image onvif-webhook-bridge:verify -Platform linux/${{ matrix.arch }} -SoakSeconds 600 -PlaywrightModule $browser
-          ./tests/Verify-Compose.ps1 -Image onvif-webhook-bridge:verify
+          ./tests/Verify-DockerRun.ps1 -Image onvif-webhook-bridge:verify
+          ./tests/Verify-Compose.ps1 -Image onvif-webhook-bridge:verify -PlaywrightModule $browser
           ./tests/Verify-InboundTls.ps1 -Image onvif-webhook-bridge:verify -Platform linux/${{ matrix.arch }}
       - name: Browser regression
         if: matrix.arch == 'amd64'

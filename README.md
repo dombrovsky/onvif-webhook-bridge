@@ -33,42 +33,38 @@ Add camera device-service URLs explicitly. The bridge discovers each camera's ev
 
 ## Quick start
 
-You need Git, Docker with Compose, and a Linux container engine on an amd64 or arm64 host. This procedure **builds locally**; it does not depend on an available registry image. See [deployment](docs/DEPLOYMENT.md#platforms-ci-and-releases) for supported platforms and the current [CI workflow](.github/workflows/ci.yml).
+You need Docker with Linux containers on AMD64 or ARM64. These commands use the **latest stable Docker Hub image**; no Compose, checkout, or build is needed. Run them in a terminal on the Docker host.
+
+Create the private password file in a Docker volume. Enter a unique password of 12–4096 characters at the hidden prompt; remember it for login:
 
 ```sh
-git clone https://github.com/dombrovsky/onvif-webhook-bridge.git
-cd onvif-webhook-bridge
-cp .env.example .env
+docker run --rm -it --mount type=volume,src=onvif-bridge-bootstrap,dst=/data --entrypoint /bin/bash dombrovskyi/onvif-webhook-bridge:latest -c 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
 ```
 
-Until the repository is public, cloning requires authorized GitHub access.
-
-Edit `.env`: replace `ONVIF_ADMIN_USERNAME` with your chosen administrator name. Keep the local image and loopback bind defaults.
-
-On a standard Linux Docker host, use **Bash** and `sudo` to create the default password file. Enter a unique password of at least 12 characters when prompted; input is hidden. See [password requirements](docs/ADMINISTRATION.md#initial-setup) for exact limits.
-
-```bash
-install -d -m 700 .local
-read -r -s -p 'Administrator password (at least 12 characters): ' bridge_password
-printf '\n'
-printf '%s' "$bridge_password" | sudo install -m 600 -o 1654 -g 1654 /dev/stdin .local/administrator-password
-unset bridge_password
-```
-
-This keeps the directory private to your account and the password file owned by the container's UID/GID **1654:1654**. Its path matches `ONVIF_ADMIN_PASSWORD_PATH` in `.env`. For NAS ACLs or rootless Docker, see [password-file permissions](docs/DEPLOYMENT.md#first-start).
-
-Then run from the repository directory:
+Start the application with persistent storage:
 
 ```sh
-docker compose config --quiet
-docker compose build
-docker compose up -d
-docker compose ps
+docker run -d --name onvif-bridge \
+  --restart unless-stopped --stop-timeout 15 \
+  --user 1654:1654 --read-only --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --publish 127.0.0.1:8080:8080 \
+  --mount type=volume,src=onvif-bridge-data,dst=/data \
+  --mount type=volume,src=onvif-bridge-bootstrap,dst=/run/bootstrap,readonly \
+  --tmpfs /tmp:rw,noexec,nosuid,size=32m,mode=1777 \
+  --env ONVIF_ADMIN_USERNAME=admin \
+  --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password \
+  dombrovskyi/onvif-webhook-bridge:latest
+docker ps --filter name=onvif-bridge
 ```
 
-Open [http://localhost:8080](http://localhost:8080) **on the Docker host** and sign in with the credentials you configured. The default is `127.0.0.1:8080` on the host, forwarding to port `8080` in the container. For a remote NAS, use a secure tunnel or the documented [HTTPS proxy setup](docs/DEPLOYMENT.md#https-and-trusted-certificates); changing the bind address alone does not secure remote access.
+Open [http://localhost:8080](http://localhost:8080) on the Docker host and log in as `admin` with your password. For a remote server or NAS, use an [SSH tunnel or HTTPS setup](docs/DEPLOYMENT.md#remote-access-and-nas); the default port is private to the host. Add a camera in **Cameras**, then use **Event Explorer** to draft and review a forwarding rule.
 
-Compose creates the persistent `bridge-data` volume at `/data`. Keep it across upgrades and back it up securely. Administrator variables initialize only a new database; changing the password file later does not change the existing login. Keep the file available for Compose and use the documented [offline reset](docs/ADMINISTRATION.md#explicit-offline-password-reset) when needed.
+For multiple independent installations, use distinct container names, data volumes, bootstrap volumes and host ports; update the bootstrap name in both commands. See [deployment guidance](docs/DEPLOYMENT.md#multiple-independent-installations).
+
+For GHCR, replace the image in both commands with `ghcr.io/dombrovsky/onvif-webhook-bridge:latest`. For Compose, see the [Compose example and configuration reference](docs/DEPLOYMENT.md#docker-compose-alternative), plus [upgrades and recovery](docs/DEPLOYMENT.md#storage-backup-upgrades-and-recovery). Local builds are covered in [development](docs/DEVELOPMENT.md#local-container-builds).
+
+**Release availability:** `latest` is not published yet, so these commands will fail to pull until the first stable release is published. The release workflow creates/updates `latest` in both registries only for non-prerelease releases.
 
 ### Forward your first event
 
@@ -92,9 +88,7 @@ These are integration possibilities, not claims of end-to-end verification with 
 
 ## Documentation
 
-Images for `linux/amd64` and `linux/arm64` are published to both [Docker Hub](https://hub.docker.com/r/dombrovskyi/onvif-webhook-bridge) (`dombrovskyi/onvif-webhook-bridge`) and [GitHub Container Registry (GHCR)](https://github.com/dombrovsky/onvif-webhook-bridge/pkgs/container/onvif-webhook-bridge) (`ghcr.io/dombrovsky/onvif-webhook-bridge`). Use an immutable version tag (without `v`) or digest. Prereleases never update `latest`; stable releases do. The Overview page shows the running executable's version.
-
-To install a published version, set `ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridge:0.1.0-rc.1` in `.env` (Docker Hub), or use `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` for GHCR, then run `docker compose pull` and `docker compose up -d --no-build`. Keep the existing data volume and password-file settings. See [release setup and upgrades](docs/DEPLOYMENT.md#publishing-a-release) for registry access, version selection and maintainer instructions.
+Images for `linux/amd64` and `linux/arm64` are published to both [Docker Hub](https://hub.docker.com/r/dombrovskyi/onvif-webhook-bridge) (`dombrovskyi/onvif-webhook-bridge`) and [GitHub Container Registry (GHCR)](https://github.com/dombrovsky/onvif-webhook-bridge/pkgs/container/onvif-webhook-bridge) (`ghcr.io/dombrovsky/onvif-webhook-bridge`). Pin a version tag (without `v`) or, for content immutability, an image digest. Prereleases never update `latest`; stable releases do. The Overview page shows the running executable's version.
 
 - [Deployment, upgrades, backup and troubleshooting](docs/DEPLOYMENT.md)
 - [Browser configuration, Event Explorer and rules](docs/BROWSER_ADMINISTRATION.md)

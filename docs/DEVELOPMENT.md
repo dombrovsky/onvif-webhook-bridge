@@ -2,6 +2,25 @@
 
 For installation and first use, start with the [project README](../README.md). This guide covers the current architecture, test commands and standalone probe. Inspect the selected revision's [CI results](../.github/workflows/ci.yml) for current verification.
 
+## Local container builds
+
+Public installations use the [published-image Quick start](../README.md#quick-start). To build changed source locally, clone this repository, enter its directory and run:
+
+```sh
+docker build --platform linux/amd64 -t onvif-webhook-bridge:local .
+```
+
+Use `linux/arm64` on an ARM64 builder. After the same password-volume initialization described in deployment, set `ONVIF_IMAGE=onvif-webhook-bridge:local` in ignored `.env`, then `docker compose up -d --no-build`. The default Compose file never builds; rebuild explicitly after source changes. Do not run `compose pull` for your local-only tag. See [deployment verification](DEPLOYMENT.md#repeating-local-verification) for NativeAOT and platform tests.
+
+Optional release-style OCI labels use the actual source version and revision:
+
+```sh
+docker build --build-arg VERSION="$(dotnet msbuild src/OnvifWebhookBridge/OnvifWebhookBridge.csproj -getProperty:Version)" --build-arg REVISION="$(git rev-parse HEAD)" -t onvif-webhook-bridge:local .
+docker run --rm --network none onvif-webhook-bridge:local --version
+```
+
+`VERSION` must match MSBuild's value; it never overrides the compiled version. Ordinary local builds without labels remain supported. Release CI supplies and verifies both labels.
+
 ## Structure and build
 
 ```text
