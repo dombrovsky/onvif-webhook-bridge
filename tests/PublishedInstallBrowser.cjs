@@ -7,7 +7,7 @@ const { chromium } = require(process.argv[2]);
     const page = await browser.newPage();
     await page.goto(process.argv[3]);
     await page.locator('[name="username"]').fill('synthetic-admin');
-    await page.locator('[name="password"]').fill('synthetic-admin-password');
+    await page.locator('[name="password"]').fill('  synthetic-admin-password  ');
     await page.locator('#login button').click();
     await page.locator('#workspace').waitFor({ state: 'visible' });
     await page.getByRole('button', { name: 'Cameras', exact: true }).click();

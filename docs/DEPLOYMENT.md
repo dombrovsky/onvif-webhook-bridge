@@ -4,7 +4,19 @@ Install the published Docker Hub image using the [README Quick start](../README.
 
 ## First start
 
-The shipped `docker-compose.yml` is a published-image installation, with no `build:` section. Save it in a permanent installation directory (or paste the following into Container Station's Compose editor). No `.env` is needed for the defaults:
+The README uses `docker run`: `onvif-bridge-data` holds the database, `onvif-bridge-bootstrap` holds the private password file, and `onvif-bridge` is the container name. Docker pulls the image automatically when missing. The image supplies the internal HTTP port, data path and health check; the startup command adds restart and security restrictions. Check health with `docker inspect --format '{{.State.Health.Status}}' onvif-bridge`.
+
+### Docker Compose alternative
+
+For a declarative installation, save the example below as `docker-compose.yml` in a permanent directory, or download it with:
+
+```sh
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/dombrovsky/onvif-webhook-bridge/main/docker-compose.yml
+```
+
+Initialize the password volume with the README command, then run `docker compose pull` and `docker compose up -d --no-build`. No checkout or build is needed.
+
+The shipped file has no `build:` section. You can also paste this example into Container Station's Compose editor. No `.env` is needed for the defaults:
 
 ```yaml
 services:
@@ -39,11 +51,17 @@ networks:
     driver: bridge
 ```
 
-Before `up`, create the external bootstrap volume and password using the README's interactive `docker run` command. Docker initializes a fresh volume mounted at `/data` from the image's private directory, already owned by **1654:1654**, mode **0700**. The shell runs as that account with `umask 077`, writing a mode **0600** password file. It does not initialize the application database. This command avoids installing helper tools, host `sudo`, or NAS-specific ownership commands. It requires an interactive terminal (`-it`); enter the password once and check the command exits successfully. Passwords are 12–4096 UTF-16 units; the application's validation is authoritative, including for non-ASCII characters. An invalid password stops startup safely. The secret is a file in a separate named volume, mounted read-only in the service. It remains recoverable plaintext: protect Docker administrator access and backups.
+Before Compose `up`, create the external bootstrap volume and password using the README's interactive `docker run` command. Docker initializes a fresh volume mounted at `/data` from the image's private directory, already owned by **1654:1654**, mode **0700**. The shell runs as that account with `umask 077`, writing a mode **0600** password file. It does not initialize the application database. This command avoids installing helper tools, host `sudo`, or NAS-specific ownership commands. It requires an interactive terminal (`-it`); enter the password once and check the command exits successfully. Passwords are 12–4096 UTF-16 units; the application's validation is authoritative, including for non-ASCII characters. An invalid password stops startup safely. The secret is a file in a separate named volume, mounted read-only in the service. It remains recoverable plaintext: protect Docker administrator access and backups.
 
 Start with `docker compose pull`, `docker compose up -d --no-build`, then `docker compose ps`. Wait for `healthy` (the first scheduled check may take about 30 seconds). A unique administrator password is mandatory on a new database; `admin` is just the configurable default username. Bootstrap settings are ignored once an administrator exists. Rewriting the password file does **not** change an existing login. Keep the external volume for recreation and recovery; it is never automatically removed by Compose.
 
-For an explicit offline reset, stop the bridge and take a protected consistent backup first. Run the interactive password command again using the **same bootstrap volume**, then `docker compose run --rm --no-deps bridge --reset-administrator`. Require exit zero before `docker compose up -d --no-build`. Cameras, rules and revisions are preserved; see [administrator policy](ADMINISTRATION.md).
+For Docker run installations, stop `onvif-bridge`, back up its data, rerun the password command, then reset with:
+
+```sh
+docker run --rm --network none --user 1654:1654 --read-only --cap-drop ALL --security-opt no-new-privileges:true --mount type=volume,src=onvif-bridge-data,dst=/data --mount type=volume,src=onvif-bridge-bootstrap,dst=/run/bootstrap,readonly --env ONVIF_ADMIN_USERNAME=admin --env ONVIF_ADMIN_PASSWORD_FILE=/run/bootstrap/administrator-password dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3 --reset-administrator
+```
+
+Require exit zero before `docker start onvif-bridge`. For an explicit offline reset with Compose, stop the bridge and take a protected consistent backup first. Run the interactive password command again using the **same bootstrap volume**, then `docker compose run --rm --no-deps bridge --reset-administrator`. Require exit zero before `docker compose up -d --no-build`. Cameras, rules and revisions are preserved; see [administrator policy](ADMINISTRATION.md).
 
 ### Possible future setup UI
 
@@ -90,7 +108,7 @@ Use `docker compose run --rm --no-deps bridge --version` for version inspection.
 
 ### Storage and container restrictions
 
-`bridge-data` is a project-scoped named volume mounted at `/data`. Keep the same project name/directory across upgrades; changing it can create an apparently empty installation. Never point two processes at one database. Named volumes avoid host UID and NAS ACL setup on a fresh install. Existing volumes do not inherit updated image ownership.
+With Compose, `bridge-data` is a project-scoped named volume mounted at `/data`. The README Docker run command instead uses the explicit name `onvif-bridge-data`. Do not switch between these names expecting the same database. To move an existing Docker run installation to Compose, keep its volume by declaring `bridge-data: {external: true, name: onvif-bridge-data}` in the top-level `volumes` section. Keep the same project name/directory across upgrades; changing it can create an apparently empty installation. Never point two processes at one database. Named volumes avoid host UID and NAS ACL setup on a fresh install. Existing volumes do not inherit updated image ownership.
 
 For a bind mount, replace `bridge-data:/data` with an absolute dedicated host directory. Arrange ownership **1654:1654** offline (or the mapped host account under rootless/user-namespace Docker); owner directory mode **0700**, DB and sidecar files **0600** are enforced. NAS ACLs must permit that identity to read/write and change modes. Fix ownership offline, never by running the service as root or making storage world-writable. Filesystem restrictions are not encryption at rest. See [storage](DATA_STORAGE.md).
 
@@ -193,7 +211,15 @@ Follow [the full storage/backup contract](DATA_STORAGE.md). Secrets in SQLite an
 
 For upgrades, keep a consistent backup, stop, pull a chosen image digest, then recreate with the same volume. Transactional migrations run before workers/listeners. Unsupported future schemas fail closed; binary rollback may require restoring a compatible backup. Do not use `down --volumes` for upgrades. Container recreation clears sessions, history, transitions, cooldowns, queues and execution results; stored configuration remains. No replay occurs.
 
-For a published-image upgrade, retain your installation directory, project name, Compose file and both volumes. After stopping and backing up the complete data volume, set `ONVIF_IMAGE` in `.env` to the selected verified tag or digest, then run:
+For a Docker run upgrade:
+
+1. Run `docker stop onvif-bridge` and take the protected consistent data backup described above.
+2. Run `docker pull <chosen-image-reference>` (replace the placeholder with the verified image tag/digest).
+3. Run `docker rm onvif-bridge` to remove only the stopped container. The named volumes remain.
+4. Repeat the README startup command with the chosen image and **the same data/bootstrap volume names**.
+5. Check Docker health, login, Overview version and saved configuration. Never remove the data volume during an upgrade.
+
+For a published-image Compose upgrade, retain your installation directory, project name, Compose file and both volumes. After stopping and backing up the complete data volume, set `ONVIF_IMAGE` in `.env` to the selected verified tag or digest, then run:
 
 ```sh
 docker compose pull
@@ -237,6 +263,12 @@ docker build --platform linux/amd64 -t onvif-webhook-bridge:local .
 ```
 
 For local ARM64 emulation on an amd64 builder, run the native fixture with `-Platform linux/arm64 -CrossCompile`, build the production image with `--platform linux/arm64`, and use that platform/image for deployment and inbound TLS verification. Keep separate image tags for each local target. Report emulation explicitly; native ARM64 hardware, real device mappings/outages and deployment-host interoperability remain independent gates. The index runner builds only a local ignored OCI archive and never publishes it. Docker runners remove their own uniquely named fixtures/volumes, preserving unrelated resources; ignored source staging and local images remain cached.
+
+The README Docker run smoke test extracts the startup command from the README, substitutes isolated names/port, and tests whitespace-password login, health, runtime restrictions, persistence after container removal/recreation, and the documented offline reset. It requires PowerShell 7 and Docker, without a build:
+
+```powershell
+./tests/Verify-DockerRun.ps1 -Pull -ExpectedVersion 0.1.0-rc.3 -ExpectedDigest sha256:4e22efec10be648348e399e00e6c83165da52075a9079170513c094f35e3be46
+```
 
 To repeat the source-free published-image check without building (PowerShell 7 and a Linux Docker engine):
 

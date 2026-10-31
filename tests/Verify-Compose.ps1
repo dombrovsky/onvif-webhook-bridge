@@ -52,7 +52,7 @@ function Login([string]$value, [int]$expected = 200) {
 }
 function InitializePassword([string]$value) {
     # Same hidden-prompt shell operation as README, with synthetic stdin and no TTY.
-    $command = 'umask 077; read -r -s -p "Administrator password: " password; printf "\n"; test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
+    $command = 'umask 077; IFS= read -r -s -p "Administrator password: " password && printf "\n" && test "${#password}" -ge 12 && test "${#password}" -le 4096 && printf "%s" "$password" > /data/administrator-password'
     $value | & docker run --rm -i --mount "type=volume,src=$id-bootstrap,dst=/data" --entrypoint /bin/bash $Image -c $command | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Private password-volume initialization failed.' }
 }
@@ -63,7 +63,7 @@ try {
     Compose config --quiet
     $configuration = Compose config --format json | ConvertFrom-Json
     if ($configuration.services.bridge.build) { throw 'Public installation must never build.' }
-    InitializePassword 'synthetic-admin-password'
+    InitializePassword '  synthetic-admin-password  '
     Compose up -d --no-build | Out-Null
     $container = Ready
     if (!(Compose port bridge 8188).StartsWith('127.0.0.1:')) { throw 'Compose must publish to loopback.' }
@@ -75,7 +75,7 @@ try {
     Invoke-Docker exec $container /bin/bash -c 'test "$(stat -c %a /data)" = 700 && test "$(stat -c %a /run/bootstrap/administrator-password)" = 600' | Out-Null
     $version = Invoke-Docker run --rm $Image --version
     if ($ExpectedVersion -and $version -ne $ExpectedVersion) { throw 'Executable version mismatch.' }
-    Login 'synthetic-admin-password'
+    Login '  synthetic-admin-password  '
     $ui = Invoke-WebRequest "$origin/" -TimeoutSec 10
     if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch 'app.js') { throw 'Embedded UI failed.' }
     $config = Invoke-RestMethod "$origin/api/configuration" -WebSession $webSession
@@ -88,7 +88,7 @@ try {
     $container = Ready
     $recreated = (Invoke-Docker inspect $container | ConvertFrom-Json)[0]
     if (($recreated.Mounts | Where-Object Destination -eq /data).Name -ne $mount.Name -or $recreated.Image -ne $imageInfo.Id) { throw 'Recreation changed image or data volume.' }
-    Login 'synthetic-admin-password'
+    Login '  synthetic-admin-password  '
     $cameras = @(Invoke-RestMethod "$origin/api/cameras" -WebSession $webSession)
     if ($cameras.Count -ne 1 -or $cameras[0].name -ne 'Synthetic persistence check' -or $cameras[0].enabled) { throw 'Configuration persistence failed.' }
     if ($PlaywrightModule) {
@@ -100,7 +100,7 @@ try {
     Compose run --rm --no-deps bridge --reset-administrator | Out-Null
     Compose up -d --no-build --force-recreate | Out-Null
     $container = Ready
-    Login 'synthetic-admin-password' 401
+    Login '  synthetic-admin-password  ' 401
     Login 'synthetic-replacement-password'
     Write-Output "PASS: source-free Compose, private password volume, health/UI/login, disabled synthetic configuration persistence, pull/recreation, offline reset; executable $version; image $($imageInfo.Id); registry $($imageInfo.RepoDigests -join ', ')."
 }
