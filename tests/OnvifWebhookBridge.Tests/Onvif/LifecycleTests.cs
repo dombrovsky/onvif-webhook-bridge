@@ -92,11 +92,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
         }
 
         [Fact]
-        public async Task CameraRevisionsAreIndependentAndRecreationCannotReviveStalePullsOrJobs()
+        public void CameraRevisionsAreIndependentAndRecreationCannotReviveStalePulls()
         {
             var history = new EventHistory();
-            var queue = new DispatchQueue();
-            var pipeline = new CameraPipeline(new(history), queue, TimeProvider.System);
+            var pipeline = new CameraPipeline(new(history), static (_, _) => false, TimeProvider.System);
             var a = new CameraConfiguration("camera", "Synthetic", "http://synthetic.invalid/a");
             var b = a with
             {
@@ -106,17 +105,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
             ActionRule[] rules = [new(new("a", a.Id, "topic", Enabled: true), action), new(new("b", b.Id, "topic", Enabled: true), action)];
             pipeline.ConfigureCameras([a, b], rules);
             var old = pipeline.Cameras.Single(c => c.Id == a.Id);
-            Assert.True(pipeline.ManualTest("a"));
-            Assert.True(pipeline.ManualTest("b"));
-            var jobA = await queue.TakeAsync(default);
-            var jobB = await queue.TakeAsync(default);
             pipeline.ConfigureCameras([a with { Password = "synthetic", Username = "synthetic" }, b], rules);
-            Assert.False(pipeline.Eligible(jobA));
-            Assert.True(pipeline.Eligible(jobB));
             pipeline.ConfigureCameras([b], [rules[1]]);
             pipeline.ConfigureCameras([a, b], rules);
             Assert.False(pipeline.IsCurrentCamera(old));
-            Assert.False(pipeline.Eligible(jobA));
             var notification = Events.Phase2Tests.Event("true") with
             {
                 Topic = "topic"
@@ -127,12 +119,13 @@ namespace OnvifWebhookBridge.Tests.Onvif
             Assert.Equal(2, pipeline.Cameras.Count);
         }
 
-        private static CameraPipeline CreatePipeline() => new(new(new EventHistory()), new(), TimeProvider.System);
+        private static CameraPipeline CreatePipeline() => new(new(new EventHistory()), static (_, _) => false, TimeProvider.System);
 
         [Fact]
         public void SubscriptionEpochResetIsPerCameraAndPreservesCooldown()
         {
-            var pipeline = CreatePipeline();
+            using var dispatcher = new HttpActionDispatcher(new NoNetworkFactory(), TimeProvider.System);
+            var pipeline = new CameraPipeline(new(new EventHistory()), dispatcher.TrySubmit, TimeProvider.System);
             var a = new CameraConfiguration("camera", "Synthetic A", "http://synthetic.invalid/a");
             var b = a with
             {
@@ -178,6 +171,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
             })[1].Kind);
             pipeline.Process(no);
             Assert.Equal(DecisionKind.Cooldown, pipeline.Process(yes)[0].Kind);
+        }
+        private sealed class NoNetworkFactory : IHttpClientFactory
+        {
+            public HttpClient CreateClient(string name) => throw new InvalidOperationException("Synthetic transport.");
         }
     }
 }

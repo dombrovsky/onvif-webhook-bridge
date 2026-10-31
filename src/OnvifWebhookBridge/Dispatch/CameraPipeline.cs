@@ -9,8 +9,8 @@ namespace OnvifWebhookBridge.Dispatch
     public sealed record ActionRule(ForwardingRule Match, HttpAction Action);
 
     // One lock orders configuration, matching, admission and execution eligibility checks.
-    // No administration endpoints; callers supply private in-memory configuration through DI.
-    public sealed class CameraPipeline(RuleState rules, DispatchQueue queue, TimeProvider clock)
+    // Admission stays synchronous; configuration validation supplies an explicit rejecting callback.
+    public sealed class CameraPipeline(RuleState rules, Func<DispatchJob, CameraPipeline, bool> trySubmit, TimeProvider clock)
     {
         private readonly object gate = new();
         private Dictionary<string, (CameraConfiguration Camera, long Revision)> cameras = new(StringComparer.Ordinal);
@@ -184,8 +184,25 @@ namespace OnvifWebhookBridge.Dispatch
                 return false;
             }
             var job = new DispatchJob(Guid.NewGuid(), id, entry.Revision, source.Revision, entry.Rule.Action, manual, clock.GetTimestamp(), cancellation);
-            var accepted = queue.TryEnqueue(job);
-            status[id] = new(job.Id, id, clock.GetUtcNow(), accepted ? ExecutionResult.Queued : ExecutionResult.Overflow);
+            // Publish before TrySubmit: execution or cancellation may finish before it returns.
+            // Record uses this same lock and checks the job identity.
+            status[id] = new(job.Id, id, clock.GetUtcNow(), ExecutionResult.Queued);
+            bool accepted;
+            try
+            {
+                accepted = trySubmit(job, this);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                // Cancellation before TaskFlow reserves admission is not overflow. Do not
+                // resubmit: the cancelled attempt may already own completion middleware.
+                status[id] = new(job.Id, id, clock.GetUtcNow(), ExecutionResult.Cancelled);
+                return false;
+            }
+            if (!accepted)
+            {
+                status[id] = new(job.Id, id, clock.GetUtcNow(), ExecutionResult.Overflow);
+            }
             return accepted;
         }
         public bool Eligible(DispatchJob job)

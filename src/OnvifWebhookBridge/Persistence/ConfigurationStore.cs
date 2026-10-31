@@ -301,7 +301,7 @@ namespace OnvifWebhookBridge.Persistence
                 throw new ArgumentException("Invalid configuration.");
             }
             var history = new EventHistory();
-            var validator = new CameraPipeline(new RuleState(history), new DispatchQueue(), TimeProvider.System);
+            var validator = new CameraPipeline(new RuleState(history), static (_, _) => false, TimeProvider.System);
             validator.ConfigureCameras(value.Cameras, value.Rules.Select(r => r.Rule));
         }
         private static T Guard<T>(Func<T> operation)

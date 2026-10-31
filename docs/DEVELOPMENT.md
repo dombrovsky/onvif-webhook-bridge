@@ -1,6 +1,6 @@
 # Development and diagnostic tools
 
-For installation and first use, start with the [project README](../README.md). This guide retains the build, verification and standalone probe instructions; historical results below apply to the revisions described, not every later change.
+For installation and first use, start with the [project README](../README.md). This guide covers the current architecture, test commands and standalone probe. Inspect the selected revision's [CI results](../.github/workflows/ci.yml) for current verification.
 
 ## Structure and build
 
@@ -20,22 +20,24 @@ tests/
 ```
 
 ```powershell
-dotnet build OnvifWebhookBridge.slnx
-dotnet test OnvifWebhookBridge.slnx --no-build --filter Category=Unit
+dotnet format whitespace OnvifWebhookBridge.slnx
+dotnet format whitespace OnvifWebhookBridge.slnx --verify-no-changes
+dotnet build OnvifWebhookBridge.slnx -c Release
+dotnet test OnvifWebhookBridge.slnx -c Release --no-build --filter Category=Unit
 ```
 
 Docker integration tests require a running Linux Docker engine. Build the simulator once with PowerShell 7, then run the tests (a missing Docker engine/image fails the integration test):
 
 ```powershell
 ./tests/Build-OnvifSimulator.ps1
-dotnet test OnvifWebhookBridge.slnx --no-build
+dotnet test OnvifWebhookBridge.slnx -c Release --no-build
 ```
 
 The script builds [onvifsim's upstream Dockerfile](https://github.com/mrtian2016/onvifsim/blob/8f86706c2ba768006e85b38f6bc1c760d36f1bba/packaging/docker/Dockerfile) at the pinned commit. Testcontainers starts a disposable simulator, uses random host ports, loads a generic synthetic camera scenario with fake credentials and mapped advertised addresses, subscribes, renews, triggers true/false notifications through its control API, pulls both states and unsubscribes. No physical camera or destination is contacted. Containers are disposed automatically; the image remains cached. Add `--no-cache --pull` to the script's Docker build command when intentionally refreshing the upstream base/OS packages, then rerun the tests.
 
-Run `./tests/Verify-Phase7Native.ps1` for the Linux x64 NativeAOT checks through phase 7. It retains the protocol, matching, GET/POST recorder, overload/redaction and two-camera fault/recovery/cleanup regressions, and adds SQLite transactions/migrations/secret handling, actual Linux ownership/modes, backup/restore and persisted restart reconciliation to a local recorder. It also publishes/runs the production executable for offline reset, fail-closed startup and authenticated JSON, and runs bounded-session/CSRF/validation tests plus authenticated API-driven onvifsim reconciliation and recorder delivery. `-StorageOnly` runs storage and security/executable checks without onvifsim. Historical Phase2/Phase4/Phase5/Phase6 scripts delegate to this runner. It builds a test-only image from an explicit source allowlist under ignored `.local/` and removes disposable fixture containers. It accepts `-Platform linux/amd64` or `-Platform linux/arm64`; native platform runners are preferred. Local amd64 hosts can use `-Platform linux/arm64 -CrossCompile` and must label execution as emulation. Physical-device interoperability remains pending; see [phase 8 evidence](DEPLOYMENT_VERIFICATION.md). See [phase 2 contracts](PHASE2_VERIFICATION.md) for truncation/transition limits. Real activation/reset mappings and outage/recovery remain pending.
+Run `./tests/Verify-Phase7Native.ps1` for Linux NativeAOT publication and runtime checks of protocol parsing, matching, HTTP recorder delivery, overload/redaction, multiple-camera recovery, SQLite transactions/migrations/permissions, authentication and persisted restart. `-StorageOnly` omits onvifsim. The runner stages an explicit source allowlist under ignored `.local/` and removes its disposable containers; images remain cached. It accepts `-Platform linux/amd64` or `-Platform linux/arm64`. Native runners are preferred; on an amd64 host, `-Platform linux/arm64 -CrossCompile` uses emulation and must be reported as such. The script names are retained for compatibility with existing CI.
 
-Run `./tests/Verify-Phase7Browser.ps1 -PlaywrightModule <installed-playwright-module>` after native verification for the automated Edge walkthrough against actual native APIs, onvifsim and a local recorder. Playwright and Node are external test tools only; the application has no frontend packages or build step. See [browser evidence](BROWSER_VERIFICATION.md) for prerequisites and scope.
+Run `./tests/Verify-Phase7Browser.ps1 -PlaywrightModule <installed-playwright-module>` after native verification for the browser walkthrough against actual APIs, onvifsim and a local recorder. Install Playwright and its browser as shown in [CI](../.github/workflows/ci.yml); use `ONVIF_BROWSER_CHANNEL=chromium` when using its bundled Chromium. Node/Playwright are test tools only, not application dependencies.
 
 For production packaging, Compose, CI and registry release instructions, see [deployment](DEPLOYMENT.md). For the public release checklist and current verification status, see [release readiness](DEPLOYMENT.md#public-release-readiness).
 
@@ -75,19 +77,11 @@ The probe requests a 120-second lease and pulls up to 100 notifications with at 
 
 The SimpleOnvifClient convenience calls do not expose CancellationToken in this version. Cancellable waits plus client disposal bound shutdown; renewal uses the generated API's cancellation token. Subscription reference parameters are not forwarded by the convenience methods: a warning identifies devices that return them. Such devices may require a lower-level client. Unknown XML already discarded by library deserialization cannot be recovered here. Subscription/producer reference addresses are intentionally omitted because they can contain private URLs/tokens. No built-in motion helpers are used.
 
-## Verification and local-network testing
+## Testing the probe and a device
 
-Source/API review used the [package's upstream revision](https://github.com/jimm98y/SharpOnvif/tree/a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71), including SimpleOnvifClient, the console example, and generated event contracts. The `net10.0` package was restored and the application built with .NET SDK 10.0.400 with zero warnings/errors. The user also reports successful NativeAOT and trimming verification with the library; the exact target and publish/runtime checks were not supplied. Linux/container and per-architecture verification from the longer product plan remain separate checks.
+Use the pinned [SharpOnvif source revision](https://github.com/jimm98y/SharpOnvif/tree/a56b8c5f47dc3ce9ba832eb8ebcb1a7eafa5bb71) when reviewing its API. After a Debug build, run `./tests/OnvifProbe.Smoke.ps1` for synthetic notification/renewal/fault regressions. The harness force-terminates its child after assertions; it does not test graceful Ctrl+C or real-device behavior.
 
-Verification also passed against a simulated SOAP service: six notifications (including repeated true and false states), duplicate fields, structured/unknown XML, unique WS-Addressing renewal headers and resubscription after a fault. Help and invalid configuration checks passed. A console Ctrl+C check during connection/retry reached the `Stopped` status. Run the synthetic regression check from the repository root with PowerShell 7 after a Debug build:
-
-```powershell
-./tests/OnvifProbe.Smoke.ps1
-```
-
-The test uses a synthetic localhost SOAP listener and bypasses launch profiles; it does not access a camera. It force-terminates its child after assertions, so its result is not a graceful shutdown check.
-
-An initial reachability check failed. A later real-device run using private local configuration successfully connected and received initialization notifications. The old renewal fault was reproduced and traced to missing WS-Addressing headers. With the fix, the probe completed at least 25 successful renewals over more than 40 minutes without recurrence, and Ctrl+C successfully unsubscribed and stopped it. Evidence is recorded in [the observation record](ONVIF_OBSERVATIONS.md). This does not establish every event type's activation/reset lifecycle, reboot recovery, or interoperability with other devices. Run the probe on a machine on the same reachable LAN as the device:
+For device testing, use a machine with authorized network access and keep configuration/captures private:
 
 1. Set the actual device-service URL and optional credentials locally, then run with `--raw`.
 2. Check that service discovery and PullPoint subscription succeed. If discovery fails, verify endpoint, credentials, firewall, and device clock; authentication can depend on clock accuracy. Exception categories are printed without potentially sensitive server messages.
@@ -95,4 +89,12 @@ An initial reachability check failed. A later real-device run using private loca
 4. Leave it running across several lease periods and check renewal. With a coordinated network interruption, check reconnect/resubscribe. Do not modify camera settings to perform these tests.
 5. Press Ctrl+C and check that shutdown completes. Events observed in another client are not proof that this tool is interoperable; compare behaviour directly.
 
-The probe remains a small standalone console application. It shares only the renewal-adapter source with the application, without depending on the web host. Existing ignored launch profiles in the old `tools` directory are not moved; recreate a private profile under `src/OnvifProbe/Properties/` if needed. See [requirements](../REQUIREMENTS.md) and the [implementation plan](../IMPLEMENTATION_PLAN.md) for design decisions and development history.
+The probe shares only the renewal-adapter source with the application and has no web-host dependency. Keep any private launch profile under `src/OnvifProbe/Properties/` ignored.
+
+## Dispatch and event contracts
+
+TaskFlow 1.1.0-rc.9 owns keyed scheduling, capacity and lifetime; retain its published package and consult its version-matched source. The pipeline takes a synchronous admission callback: production binds the singleton dispatcher; configuration-only validation supplies an explicit rejecting callback without allocating a flow. Admission updates cooldown only on acceptance and takes immutable configuration revisions. The dispatcher keeps application HTTP policy and completion status mapping. Final disposal settles the original flow before dependencies are disposed; a cancelled hosted stop only ends the host's wait. See [operation/shutdown](DEPLOYMENT.md#first-start) and [matching/delivery](BROWSER_ADMINISTRATION.md#matching-and-delivery).
+
+Tests must wait for TaskFlow completion/quiescence when reusing capacity or pausing execution. Terminal logging occurs before a delegate returns. The dispatch fixture uses same-key, no-HTTP barriers to wait until prior work has quiesced. Transport, cancellation and fake-clock timer gates exercise ordering without sleeps.
+
+Normalization preserves the library-exposed topic/namespace context, duplicate Source/Data/Key fields, ElementItems, property operations and extensions. Retention is bounded: 64 KiB per event, 16 KiB per string and 256 fields across Source/Data/Key; history is at most 100 events / 1 MiB globally. Truncated events remain inspectable, cannot match exact rules and reset uncertain transition baselines. Parsed DOM XML is not original SOAP bytes; content lost by library deserialization cannot be reconstructed. These bounds and preservation rules are enforced by normalization/matching tests.
