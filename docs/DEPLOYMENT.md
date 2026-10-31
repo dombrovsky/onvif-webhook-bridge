@@ -1,23 +1,150 @@
 # Container deployment and release
 
-Build locally with `docker compose build`. Nothing in these instructions requires image publication. The application remains one .NET 10 NativeAOT process, including the browser, authenticated APIs, independent camera workers and SQLite. It has no default administrator.
+Install the published Docker Hub image using the [README Quick start](../README.md#quick-start). No checkout or build is required. The application is one .NET 10 NativeAOT process with embedded browser files and SQLite; it has no default password. Camera connections and webhook rules are configured **in the browser**, not through container environment variables.
 
 ## First start
 
-Copy `.env.example` to ignored `.env`. Replace the administrator name and password-file path locally. Create a private UTF-8 file containing a password of 12–4096 characters. Keep it outside source control; restrict its parent and read access. Compose file-backed secrets are mounted files, not an encrypted secret store. The container account (UID/GID 1654) must be able to read the file. On Linux, arrange ownership/access before startup; Compose does not reliably implement file-secret uid/gid/mode remapping. Do not put the password in `.env` or shell arguments.
+The shipped `docker-compose.yml` is a published-image installation, with no `build:` section. Save it in a permanent installation directory (or paste the following into Container Station's Compose editor). No `.env` is needed for the defaults:
 
-```sh
-docker compose config --quiet
-docker compose build
-docker compose up -d
-docker compose ps
+```yaml
+services:
+  bridge:
+    image: ${ONVIF_IMAGE:-dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3}
+    restart: unless-stopped
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    environment:
+      ASPNETCORE_HTTP_PORTS: ${ONVIF_CONTAINER_PORT:-8080}
+      ONVIF_DATA_DIRECTORY: /data
+      ONVIF_ADMIN_USERNAME: ${ONVIF_ADMIN_USERNAME:-admin}
+      ONVIF_ADMIN_PASSWORD_FILE: /run/bootstrap/administrator-password
+    ports:
+      - "${ONVIF_BIND_ADDRESS:-127.0.0.1}:${ONVIF_PUBLISHED_PORT:-8080}:${ONVIF_CONTAINER_PORT:-8080}"
+    volumes:
+      - bridge-data:/data
+      - administrator-bootstrap:/run/bootstrap:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    networks: [bridge]
+volumes:
+  bridge-data:
+  administrator-bootstrap:
+    external: true
+    name: ${ONVIF_BOOTSTRAP_VOLUME:-onvif-bridge-bootstrap}
+networks:
+  bridge:
+    driver: bridge
 ```
 
-The default published interface is loopback. Open the configured local port and log in. Set `ONVIF_PUBLISHED_PORT` to change the host port and `ONVIF_CONTAINER_PORT` to change the single internal HTTP port. `ASPNETCORE_HTTP_PORTS` and the built-in `--health-probe` use that same single port; overriding Kestrel HTTP URLs requires updating probe configuration accordingly. `ONVIF_BIND_ADDRESS` changes the published interface deliberately. Use HTTPS for access beyond a controlled local connection.
+Before `up`, create the external bootstrap volume and password using the README's interactive `docker run` command. Docker initializes a fresh volume mounted at `/data` from the image's private directory, already owned by **1654:1654**, mode **0700**. The shell runs as that account with `umask 077`, writing a mode **0600** password file. It does not initialize the application database. This command avoids installing helper tools, host `sudo`, or NAS-specific ownership commands. It requires an interactive terminal (`-it`); enter the password once and check the command exits successfully. Passwords are 12–4096 UTF-16 units; the application's validation is authoritative, including for non-ASCII characters. An invalid password stops startup safely. The secret is a file in a separate named volume, mounted read-only in the service. It remains recoverable plaintext: protect Docker administrator access and backups.
 
-The named volume is initialized from the image's private `/data`, owned by UID/GID 1654. Existing/bind-mounted directories and DB/sidecars must already belong to that account with owner access; directory mode 0700 and file mode 0600 are enforced. Fix ownership offline, never by running the service as root or making storage world-writable. A new named volume works without a privileged init service. `ONVIF_DATA_DIRECTORY` can select another dedicated mount in a Compose override, with the same ownership contract. Root filesystem is read-only, `/tmp` is a bounded disposable tmpfs, all capabilities are dropped and privilege escalation is disabled. Stop allowance is 15 seconds, including the workers' five-second cleanup target. Shutdown closes dispatch admission and cancels queued/active work. The dispatcher honors the host stop token, but final DI disposal still waits for TaskFlow settlement so shared HTTP resources remain alive. A transport that ignores cancellation can therefore outlive graceful shutdown and be terminated by Docker at the hard deadline; completion/status publication and destination effects are then not guaranteed. Increasing the allowance does not make uncooperative work safe or durable.
+Start with `docker compose pull`, `docker compose up -d --no-build`, then `docker compose ps`. Wait for `healthy` (the first scheduled check may take about 30 seconds). A unique administrator password is mandatory on a new database; `admin` is just the configurable default username. Bootstrap settings are ignored once an administrator exists. Rewriting the password file does **not** change an existing login. Keep the external volume for recreation and recovery; it is never automatically removed by Compose.
 
-Bootstrap variables are ignored after the administrator exists. Keep the private file available for the shipped Compose definition, which requires its path at configuration time; startup ignores it after bootstrap. A separately reviewed override can remove bootstrap fields and their required substitutions. Retain a safe operator reset procedure. For offline reset, stop the bridge first, keep a consistent protected backup, then run `docker compose run --rm --no-deps bridge --reset-administrator` with the desired name/password file. Require exit zero before starting normally. This preserves cameras, rules and revisions. See [administrator policy](ADMINISTRATION.md).
+For an explicit offline reset, stop the bridge and take a protected consistent backup first. Run the interactive password command again using the **same bootstrap volume**, then `docker compose run --rm --no-deps bridge --reset-administrator`. Require exit zero before `docker compose up -d --no-build`. Cameras, rules and revisions are preserved; see [administrator policy](ADMINISTRATION.md).
+
+### Possible future setup UI
+
+A browser setup wizard would be an authentication change, outside this installation work. A safe design would require a short-lived, single-use local setup token, protected delivery of that token, same-origin/CSRF checks, bounded attempts, and transactional first-administrator creation before enabling workers or other APIs. Concurrent setup and restart/replay behavior would need dedicated tests. An unauthenticated publicly reachable first-user-wins setup page would weaken the current fail-closed behavior. The named password volume already removes host ownership commands without changing authentication.
+
+### Configuration reference
+
+Compose reads interpolation values from the shell or local `.env` (shell wins). These are **not automatically passed into the application**. `.env.example` lists optional overrides and contains no password. Use one installation directory/project consistently so Compose keeps the same data volume.
+
+| Compose variable | Default | Status and valid values / interaction |
+| --- | --- | --- |
+| `ONVIF_IMAGE` | `dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3` | Optional image reference; use a verified version or `repository@sha256:…` digest. GHCR alternative: `ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.3`. Version tags omit `v`. After the first stable release, `dombrovskyi/onvif-webhook-bridge:latest` or `ghcr.io/dombrovsky/onvif-webhook-bridge:latest` tracks stable releases. No `latest` exists yet; prereleases never create/update it. |
+| `ONVIF_ADMIN_USERNAME` | `admin` | Bootstrap/reset only; nonblank, maximum 256 UTF-16 units. Compose passes this into the application. |
+| `ONVIF_BOOTSTRAP_VOLUME` | `onvif-bridge-bootstrap` | Optional external Docker volume name; must already contain `administrator-password`, created as above. Use a distinct name for each independent installation. |
+| `ONVIF_BIND_ADDRESS` | `127.0.0.1` | Optional host bind address; retain loopback for tunnels. LAN/all-interface binds require deliberate HTTPS/network configuration. |
+| `ONVIF_PUBLISHED_PORT` | `8080` | Optional host TCP port, 1–65535; choose an unused port. `0` is useful only for tests requesting an ephemeral port. |
+| `ONVIF_CONTAINER_PORT` | `8080` | Advanced internal TCP port, 1–65535; Compose sets both port mapping and `ASPNETCORE_HTTP_PORTS`. Use a single port to keep the probe working. |
+
+The following are actual runtime inputs. With this Compose file, change fixed environment entries/mounts in the YAML if necessary; putting a value in `.env` only affects entries explicitly interpolated above.
+
+| Application environment variable | Default | Status and interaction |
+| --- | --- | --- |
+| `ONVIF_DATA_DIRECTORY` | `/data` on Linux | Required writable persistent storage; shipped Compose fixes `/data`. Other operating systems default to `data` beside the executable. A different path needs a matching dedicated mount and ownership. |
+| `ONVIF_ADMIN_USERNAME` | None in the application | Mandatory with a password source for first bootstrap or reset; Compose supplies `admin`. Ignored during normal startup after initialization. |
+| `ONVIF_ADMIN_PASSWORD_FILE` | None | Preferred bootstrap/reset source. Compose fixes `/run/bootstrap/administrator-password`. Readable UTF-8 file, trailing CR/LF removed, maximum 16 KiB file with bounded character read; resulting password 12–4096 UTF-16 units. |
+| `ONVIF_ADMIN_PASSWORD` | None | Alternative bootstrap/reset source; avoid plaintext environment secrets visible in container inspection. Mutually exclusive with the file source when bootstrap/reset runs. Not passed by shipped Compose. |
+| `ASPNETCORE_HTTP_PORTS` | `8080` in image | Advanced .NET HTTP listener setting; also read directly by health probe. Probe requires one integer port, not .NET's semicolon-separated list. |
+| `ASPNETCORE_HTTPS_PORTS` | Unset | Advanced standard .NET HTTPS port list; requires a configured certificate. Retain the separate HTTP health listener; named Kestrel endpoints override this setting. |
+| `ASPNETCORE_URLS` / `--urls` | Unset | Standard .NET advanced listener overrides; can override HTTP ports, so retain an HTTP loopback health listener on `ASPNETCORE_HTTP_PORTS`. Not required for normal installation. |
+| `Kestrel__Endpoints__Http__Url`, `Kestrel__Endpoints__Https__Url` | Unset | Advanced standard .NET endpoint configuration; see HTTPS example below. Named endpoints override URL/port settings. |
+| `Kestrel__Certificates__Default__Path`, `Kestrel__Certificates__Default__Password` | Unset | Advanced HTTPS certificate path and optional PFX password; mount protected readable files. No project-specific certificate-password-file setting exists. |
+| `DOTNET_EnableDiagnostics` | `0` in image | Advanced .NET diagnostic control; leave disabled for ordinary deployments. |
+
+The application uses the standard .NET host configuration system for listener/runtime options; this is not a promise that arbitrary .NET settings are useful or supported by this deployment. Application-specific `ONVIF_*` values above are read directly from environment, not from JSON or CLI configuration. There are no container startup options for camera URLs, camera credentials, rule matching, retries, or per-webhook certificate policy. `ONVIF_ENDPOINT`, `ONVIF_USERNAME`, `ONVIF_PASSWORD` and `--raw` belong to the separate development probe, which is **not** the container entrypoint. Logging providers are deliberately cleared to prevent network diagnostics leaking secrets; standard log-level overrides do not enable request/body logging. HTTP action delivery and health probes disable proxies and redirects; `HTTP_PROXY`/`HTTPS_PROXY` are not a supported way to proxy webhook delivery.
+
+| Executable operation | Behavior |
+| --- | --- |
+| No arguments | Initialize storage/bootstrap if needed, then start authenticated service; exit 1 on setup failure. |
+| `--version` (alone) | Print compiled product version and exit without touching storage or starting listeners. |
+| `--health-probe` (alone) | Check exact `Healthy` response at loopback `/health` on the configured HTTP port; exit 0/1, four-second deadline, no proxy/redirect. |
+| `--reset-administrator` | Offline credential replacement and exit; stop all processes using this database first. |
+
+Use `docker compose run --rm --no-deps bridge --version` for version inspection. Dockerfile `TARGETARCH`, `BUILDARCH`, `VERSION`, `REVISION` and BuildKit's `BUILDPLATFORM` are **build inputs**, not installation settings; `VERSION` must agree with source and does not override it.
+
+### Storage and container restrictions
+
+`bridge-data` is a project-scoped named volume mounted at `/data`. Keep the same project name/directory across upgrades; changing it can create an apparently empty installation. Never point two processes at one database. Named volumes avoid host UID and NAS ACL setup on a fresh install. Existing volumes do not inherit updated image ownership.
+
+For a bind mount, replace `bridge-data:/data` with an absolute dedicated host directory. Arrange ownership **1654:1654** offline (or the mapped host account under rootless/user-namespace Docker); owner directory mode **0700**, DB and sidecar files **0600** are enforced. NAS ACLs must permit that identity to read/write and change modes. Fix ownership offline, never by running the service as root or making storage world-writable. Filesystem restrictions are not encryption at rest. See [storage](DATA_STORAGE.md).
+
+If you already use a host password file, keep your existing secret configuration instead of migrating it: replace the `administrator-bootstrap` service mount with `secrets: [administrator_password]`, set `ONVIF_ADMIN_PASSWORD_FILE: /run/secrets/administrator_password`, remove the bootstrap top-level volume declaration, and add:
+
+```yaml
+secrets:
+  administrator_password:
+    file: ${ONVIF_ADMIN_PASSWORD_PATH:?Set a private readable password file path}
+```
+
+The old `ONVIF_ADMIN_PASSWORD_PATH` is only a Compose interpolation variable in that variant; the application never consumes it. Host files must be readable by container UID 1654; Compose local file secrets do not reliably remap uid/gid/mode. Restrict the parent directory as well. Keep existing deployment YAML when upgrading an older installation; downloading a replacement is unnecessary.
+
+The service runs as **1654:1654**, with read-only root, all capabilities dropped and `no-new-privileges`. `/tmp` is a disposable 32 MiB `noexec,nosuid` tmpfs. No privileged initializer, Docker socket, host network, or extra service is needed. `restart: unless-stopped` restarts exited processes unless deliberately stopped; an unhealthy status alone does not restart a container. Image health checks run every 30 seconds, timeout 5 seconds, startup allowance 20 seconds, three failures before unhealthy; disconnected cameras do not fail process health.
+
+Stop grace is 15 seconds, including workers' five-second cleanup target. Admission closes and queued/active work is cancelled. Host stop cancellation is honored, but final DI disposal waits for TaskFlow settlement so shared HTTP resources remain alive. A transport ignoring cancellation may outlive the grace period and be killed by Docker; completion and destination effects are then uncertain. Increasing grace does not make delivery durable.
+
+## Remote access and NAS
+
+For a remote Linux server or QNAP, run an SSH tunnel **on your workstation**, replacing the placeholders with your SSH account and host:
+
+```sh
+ssh -N -L 18080:127.0.0.1:8080 <ssh-user>@<docker-host>
+```
+
+Then open `http://localhost:18080`. For continuous shared access use the validated HTTPS-backend arrangement below. Do not assume Container Station's HTTP link is secure remote administration.
+
+QNAP TS-451D2 requires the **linux/amd64** image. Check `docker version` and `docker compose version` over SSH; where only the older `docker-compose` command exists, check `docker-compose version` and validate the YAML with `docker-compose config` before importing. The documented commands target Compose v2 or later; Container Station versions differ, so update/use a compatible Compose installation if validation fails. If `curl` is unavailable, download the YAML on your workstation and upload/paste it through Container Station. Run the password initialization in an SSH terminal; the GUI does not provide the hidden interactive prompt. No Ubuntu `install` command, `sudo`, or host `chown` is required for the named-volume path.
+
+### Isolated NAS validation
+
+These commands are an operator-run test procedure, not authorization for automated NAS changes. First inspect existing containers, published ports and volumes read-only with `docker ps`, `docker volume ls`, and `docker network ls`. Confirm host port **18081** is unused; choose another if occupied. Use a new empty directory, fresh project/volume names and the downloaded YAML. Never reuse production YAML/data or change QVR Pro/camera settings.
+
+Create this `.env` in that directory (choose unused names if they already exist):
+
+```dotenv
+ONVIF_BOOTSTRAP_VOLUME=onvif-nas-test-bootstrap
+ONVIF_PUBLISHED_PORT=18081
+```
+
+Run the README password command with `src=onvif-nas-test-bootstrap`, then:
+
+```sh
+docker compose -p onvif-nas-test config --quiet
+docker compose -p onvif-nas-test pull
+docker compose -p onvif-nas-test up -d --no-build
+docker compose -p onvif-nas-test ps
+docker compose -p onvif-nas-test run --rm --no-deps bridge --version
+docker inspect --format '{{.Image}} {{.Config.Image}}' "$(docker compose -p onvif-nas-test ps -q bridge)"
+```
+
+Tunnel workstation port 18080 to NAS loopback **18081**, log in and verify Overview version. Add a **disabled synthetic** camera named `Synthetic persistence check`, endpoint `http://camera.example/onvif/device_service` (no connection/test), then recreate using `docker compose -p onvif-nas-test up -d --no-build --force-recreate`. Log in again and confirm it remains. Check health and volume mounts using `docker inspect`; compare the image ID with `docker image inspect dombrovskyi/onvif-webhook-bridge:0.1.0-rc.3`. Do not test real cameras or destinations without separate authorization. Startup/network creation and authenticated local HTTP are covered here; actual camera routing remains a separate test.
+
+Stop only this test with `docker compose -p onvif-nas-test down` when finished. This preserves its volumes. Remove test data only after verifying the exact test volume names; leave production containers/networks/volumes untouched. NAS interoperability must be reported separately from local Docker tests.
 
 ## HTTPS and trusted certificates
 
@@ -64,7 +191,18 @@ Outbound HTTPS uses normal system CA validation for both ONVIF and actions. The 
 
 Follow [the full storage/backup contract](DATA_STORAGE.md). Secrets in SQLite and backups are recoverable plaintext, protected by permissions rather than encryption. Stop the service before a filesystem backup; preserve the complete directory and sidecars. Alternatively use SQLite's online backup API to create a consistent snapshot. Never copy only a live main DB and discard WAL. Restore into a separate private correctly owned directory with the service stopped; retain the original. Start a single process on that directory and check schema, configuration, masked secrets and subscription state. Restore re-enables saved actions, so review the chosen backup before startup.
 
-For upgrades, keep a consistent backup, stop, build/pull a chosen immutable image digest, then recreate with the same volume. Transactional migrations run before workers/listeners. Unsupported future schemas fail closed; binary rollback may require restoring a compatible backup. Do not use `down --volumes` for upgrades. Container recreation clears sessions, history, transitions, cooldowns, queues and execution results; stored configuration remains. No replay occurs.
+For upgrades, keep a consistent backup, stop, pull a chosen image digest, then recreate with the same volume. Transactional migrations run before workers/listeners. Unsupported future schemas fail closed; binary rollback may require restoring a compatible backup. Do not use `down --volumes` for upgrades. Container recreation clears sessions, history, transitions, cooldowns, queues and execution results; stored configuration remains. No replay occurs.
+
+For a published-image upgrade, retain your installation directory, project name, Compose file and both volumes. After stopping and backing up the complete data volume, set `ONVIF_IMAGE` in `.env` to the selected verified tag or digest, then run:
+
+```sh
+docker compose pull
+docker compose up -d --no-build
+docker compose ps
+docker compose run --rm --no-deps bridge --version
+```
+
+Confirm health, login and saved configuration before considering the upgrade complete. A forced recreation of the same image is a safe persistence rehearsal, not proof of compatibility with a future schema. Never use `down --volumes`, delete the volume, or change project names as part of an upgrade.
 
 ## Network diagnosis and mappings
 
@@ -86,7 +224,7 @@ Dependencies retain their existing exact package pins; SDK/runtime manifest dige
 
 Requires PowerShell 7, .NET 10, a Linux Docker engine, the pinned simulator image (`tests/Build-OnvifSimulator.ps1`) and Node for the HTTPS client. The production browser walkthrough additionally needs an external Playwright module/browser; the application itself has no Node dependency. Build the native fixture first so its local HTTP/TLS recorder image is available:
 
-The deployment soak requires recorder delivery from each camera on every cycle, alongside subscription and process health checks. Compose verification uses isolated synthetic setup, checks password replacement through old/new login results and restores inherited environment values. It does not import the operator's `.env`.
+The deployment soak requires recorder delivery from each camera on every cycle, alongside subscription and process health checks. Compose verification copies only YAML to an isolated directory, initializes a private password volume, checks health/UI/login, persists a disabled synthetic camera through recreation, checks password replacement through old/new login results and restores inherited environment values. It does not import the operator's `.env`.
 
 ```powershell
 ./tests/Verify-Phase7Native.ps1 -Platform linux/amd64
@@ -99,6 +237,18 @@ docker build --platform linux/amd64 -t onvif-webhook-bridge:local .
 ```
 
 For local ARM64 emulation on an amd64 builder, run the native fixture with `-Platform linux/arm64 -CrossCompile`, build the production image with `--platform linux/arm64`, and use that platform/image for deployment and inbound TLS verification. Keep separate image tags for each local target. Report emulation explicitly; native ARM64 hardware, real device mappings/outages and deployment-host interoperability remain independent gates. The index runner builds only a local ignored OCI archive and never publishes it. Docker runners remove their own uniquely named fixtures/volumes, preserving unrelated resources; ignored source staging and local images remain cached.
+
+To repeat the source-free published-image check without building (PowerShell 7 and a Linux Docker engine):
+
+```powershell
+./tests/Verify-Compose.ps1 -Pull -ExpectedVersion 0.1.0-rc.3 -ExpectedDigest sha256:4e22efec10be648348e399e00e6c83165da52075a9079170513c094f35e3be46
+```
+
+The digest is the verified multi-platform index for `0.1.0-rc.3` in both registries; the runner pulls/executes AMD64. Pass `-PlaywrightModule <absolute-module-path>` to additionally test browser login and the persisted camera screen (Node plus Edge, or set `ONVIF_BROWSER_CHANNEL=chromium` with Chromium installed). CI runs this same Compose smoke against its candidate image on native AMD64/ARM64, with the browser check on AMD64; it does not pull a public release as a PR prerequisite.
+
+### Docker Hub overview
+
+[`DOCKER_HUB.md`](DOCKER_HUB.md) is the checked-in source for Docker Hub's repository overview. After review/merge, a Docker Hub maintainer should copy its Markdown into the repository overview editor. Image publication does not synchronize that text. Keep the Quick start/version aligned with the README when updating it.
 
 ## Public release readiness
 
@@ -157,32 +307,7 @@ Images are published to both Docker Hub and GHCR with the same tested content an
 
 Runnable architectures are exactly `linux/amd64` and `linux/arm64`. There are no public platform-specific moving aliases or minor/major aliases. Prereleases never touch `latest` or GitHub's latest stable designation. Stable releases update `latest` in both registries only after both immutable version manifests pass verification. Prefer explicit version tags or the index digest in the GitHub Release over `latest` for controlled upgrades.
 
-After a version is published, authenticate if its registry visibility requires it, and set the chosen image in `.env`, for example:
-
-```sh
-ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridge:0.1.0-rc.1
-```
-
-Alternatively, use `ONVIF_IMAGE=ghcr.io/dombrovsky/onvif-webhook-bridge:0.1.0-rc.1` for the same version on GHCR.
-
-With the existing password-file and persistent-volume settings intact:
-
-```sh
-docker compose pull
-docker compose up -d --no-build
-docker compose ps
-```
-
-Before upgrading, stop and take a consistent private data backup as described above, then change only the pinned image and recreate using the same Compose project/volume. Never run `docker compose down --volumes` to upgrade. Login sessions expire on restart; configuration remains. A schema rollback may require the corresponding backup.
-
-For a local image with release-style OCI labels, supply the source version and revision explicitly (ordinary local builds remain supported):
-
-```sh
-docker build --build-arg VERSION=0.1.0-rc.1 --build-arg REVISION="$(git rev-parse HEAD)" -t onvif-webhook-bridge:local .
-docker run --rm --network none onvif-webhook-bridge:local --version
-```
-
-`VERSION` is checked against MSBuild's source value before publishing the binary, not used to override it. Local builds without these optional arguments still have a meaningful compiled/UI version, with empty version/revision OCI labels. Release CI always supplies and validates both labels.
+Public registry pulls need no credentials. If an operator deliberately uses a private mirror, authenticate to that registry separately. Use the [configuration reference](#configuration-reference) for image selection and [upgrade procedure](#storage-backup-upgrades-and-recovery) to retain storage. Local image builds and OCI labels are covered in [development](DEVELOPMENT.md#local-container-builds).
 
 ### Artifact verification and deliberate limits
 
