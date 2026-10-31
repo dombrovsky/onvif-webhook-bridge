@@ -33,7 +33,7 @@ Add camera device-service URLs explicitly. The bridge discovers each camera's ev
 
 ## Quick start
 
-You need Git, Docker with Compose, and a Linux container engine on an amd64 or arm64 host. This procedure **builds locally**; it does not depend on an available registry image. See [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md) for platform verification and remaining hardware gates.
+You need Git, Docker with Compose, and a Linux container engine on an amd64 or arm64 host. This procedure **builds locally**; it does not depend on an available registry image. See [deployment](docs/DEPLOYMENT.md#platforms-ci-and-releases) for supported platforms and the current [CI workflow](.github/workflows/ci.yml).
 
 ```sh
 git clone https://github.com/dombrovsky/onvif-webhook-bridge.git
@@ -106,8 +106,8 @@ To install a published version, set `ONVIF_IMAGE=dombrovskyi/onvif-webhook-bridg
 ## Compatibility and limitations
 
 - Cameras must expose a reachable ONVIF event service with PullPoint support. Manufacturer and firmware differences affect topics, fields, authentication and subscriptions; ONVIF branding alone does not establish compatibility. There is no automatic camera discovery.
-- The standalone probe received initialization events, renewed subscriptions and shut down cleanly on one real device. Full detection activation/reset, real-device outage/reboot recovery and real destination effects remain pending. See [device observations](docs/ONVIF_OBSERVATIONS.md), [deployment evidence](docs/DEPLOYMENT_VERIFICATION.md) and [current UI verification](docs/UI_REDESIGN_VERIFICATION.md).
-- Docker targets are `linux/amd64` and `linux/arm64`. Both have native hosted CI evidence; operator NAS/hardware compatibility still needs verification. ARMv7 is excluded and Linux 32-bit x86 is unsupported.
+- Validate activation/reset cycles, stable event identities, outage/reboot recovery and destination effects on your own devices. Simulator/recorder tests and hosted CI do not establish device interoperability. Use the [diagnostic probe](docs/DEVELOPMENT.md#diagnostic-probe) to inspect actual notifications.
+- Docker targets are `linux/amd64` and `linux/arm64`. The [CI workflow](.github/workflows/ci.yml) tests both on native runners; operator hardware compatibility still needs verification. ARMv7 is excluded and Linux 32-bit x86 is unsupported.
 - Event history and delivery results are bounded and in memory. Restart clears history, sessions, transition state, cooldowns and queued work. Events missed during disconnection are not replayed; delivery is not durable or exactly once.
 - This is an event bridge. It does not stream or record video, proxy RTSP, or provide MQTT integration.
 

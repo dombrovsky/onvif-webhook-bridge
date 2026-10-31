@@ -1,45 +1,32 @@
-# Coding-agent instructions
+# Maintaining ONVIF Webhook Bridge
 
-## Code formatting
+## Implementation
 
-- For C# changes, follow the applicable `.editorconfig`: use braces for control-flow statements, put opening braces on their own lines, and keep statements on separate lines.
-- Before committing, run `dotnet format whitespace OnvifWebhookBridge.slnx` to apply formatting, then run `dotnet format whitespace OnvifWebhookBridge.slnx --verify-no-changes` to confirm no formatting differences remain.
+- Keep one .NET 10 NativeAOT Minimal API process with DI, independent camera workers, HttpClientFactory, direct SQLite and embedded plain browser files. Keep the diagnostic probe a small standalone console application and retain its shared WS-Addressing renewal adapter.
+- Prefer concrete components and minimal changes. Add abstractions only for an actual external seam or test; avoid speculative layers, brokers, ORMs, frontend frameworks and extra services. Preserve the license and unrelated work.
+- TaskFlow 1.1.0-rc.9 owns keyed FIFO/round-robin scheduling, four concurrent deliveries, one active job per rule, global/per-rule pending limits of 100/25 and shutdown. Use synchronous non-waiting TrySubmit; do not duplicate its queues, active sets or lifecycle registry.
+- Keep rule processing and admission synchronous and atomic with configuration snapshots. History precedes matching. Only accepted jobs consume cooldown. Preserve job identity guards and observe every accepted completion, including queued cancellation. HTTP deadlines/retries remain inside delivery, not enqueue middleware.
+- StopAsync must honor the host's cancellation token; final disposal must still settle TaskFlow before its dependencies are disposed. Never abandon accepted work or dispose resources underneath it. Cancellation is cooperative; an uncooperative transport may outlive the container grace period.
+- Preserve ordinal topic/text matching, explicit XML booleans, duplicate and structured Source/Data/Key fields, property operations and extension details. Do not assume a field named State, rewrite vendor topics, deduplicate or suppress inspector events.
+- Transition rules require a known baseline and stable Source/Key identity; resets, edits, bounded identity eviction and cooldown follow the current [browser guide](docs/BROWSER_ADMINISTRATION.md#matching-and-delivery). Configuration revisions invalidate obsolete work before each request. Isolate camera/action failures and coordinate lease renewal with long-poll timing.
+- Inspect the actual pinned library API and version-matched source before changing ONVIF or TaskFlow calls. Do not infer released APIs from upstream main. Preserve bounded bytes/counts, queues, request deadlines, retries and cleanup.
 
-## Current repository state and authorization
+## Security and operation
 
-Phase 1 is complete under the revised diagnostic/library-feasibility scope in IMPLEMENTATION_PLAN.md. The console probe in `src/OnvifProbe/` uses SharpOnvifClient 0.11.2; retain its shared WS-Addressing renewal adapter and regression tests. Subsequent authorization produced the scaffold, phase 2 normalization/history/matching/admission, phase 3 HTTP forwarding/manual test services and phase 4 multiple-camera supervision/resilient lifecycle. Phase 5 was explicitly authorized and delivers transactional SQLite configuration persistence, secret edits/masked reads, administrator bootstrap-hash storage and startup restoration. See `docs/PHASE2_VERIFICATION.md`, `docs/HTTP_VERIFICATION.md`, `docs/LIFECYCLE_VERIFICATION.md`, `docs/PERSISTENCE_VERIFICATION.md` and `docs/DATA_STORAGE.md` for evidence, contracts and pending real-device activation/reset/outage checks. Phase 6 was explicitly authorized and adds authenticated Minimal API administration, environment/password-file bootstrap, offline reset, bounded sessions/throttling and CSRF/origin protections; see docs/ADMIN_VERIFICATION.md and docs/ADMINISTRATION.md. No phase 7 or later implementation is authorized. Do not begin browser UI, deployment, Compose, workflows or TaskFlow adoption without further authorization. Local camera deployment was cancelled; automated Docker verification only is authorized.
+- Keep tracked files generic: no personal/deployment addresses, device identities, usernames, credentials, real destination URLs, local databases, .env files or unsanitized captures. Use clearly synthetic fixtures and ignored private local configuration. Inspect the diff for secrets before committing.
+- Never log URLs, authorization headers, passwords, request/response bodies, SOAP authentication or arbitrary network exception text. Audit library and HttpClientFactory diagnostics; seed fake secrets in redaction tests.
+- Fail closed without administrator setup. Authenticate administration/events/manual tests, enforce CSRF/origin checks, escape device content, mask stored secrets and make replacement/clearing explicit.
+- Keep TLS verification on by default; retain per-webhook opt-in isolation and strict camera TLS. Do not bypass global certificate, DNS/address, redirect, proxy or self-target restrictions.
+- Recoverable secrets and backups require restricted /data ownership and permissions; filesystem restrictions are not encryption at rest. Preserve transaction-before-activation and persistence schemas unless the task requires a reviewed change.
+- Use a disposable simulator and local HTTP recorder for tests. Real destination tests cause external actions and need authorization for the actual destination. Coordinate device restarts; never change firmware, detection settings, video/PTZ or destination-host settings incidentally.
+- Do not deploy externally, merge, tag, release or publish images unless explicitly authorized. Preserve release/versioning workflows and do not broaden implementation scope.
 
-When a later user explicitly authorizes more implementation, work on the requested phase of `IMPLEMENTATION_PLAN.md`. That instruction supersedes the current phase-limited authorization. Read both planning documents before coding. Do not interpret a phase request as authorization to implement the entire product. Preserve the diagnostic probe as a small console application without DI or production architecture.
+## Formatting and validation
 
-## Implementation discipline
-
-- Phase 1's event path and library feasibility are established. Follow the revised phase 2 for generic normalization/matching; privately validate activation/reset cycles before claiming a real transition rule works. Do not hardcode topics/fields or imply simulated lifecycle tests prove hardware behaviour. Real reboot recovery and Linux/container checks remain assigned to later phases.
-- Distinguish source-reviewed API capability, synthetic fixture results, JIT tests, published NativeAOT runtime results and real-camera interoperability. If the camera is unavailable, report the hardware gate pending and follow the plan's exit gate. Never describe simulation as device or destination interoperability verification.
-- Check the restored pinned SharpOnvifClient API and version-matched source/sample before writing calls. Do not invent methods, return shapes, renewal, cancellation, or endpoint-reference support. Current main documentation may differ from a released package.
-- Never assume a boolean field is called `State`. Preserve vendor topics, all Source/Data/Key fields, duplicate names, ElementItems, property operations and extension details. Inspector admission precedes matching/cooldown/dispatch and includes false/unmatched notifications.
-- Keep a single .NET 10 NativeAOT Minimal API process with DI, independent PullPoint workers, HttpClientFactory, direct SQLite and small plain browser files. Avoid React/Node, MVC, brokers, ORMs without demonstrated need, generic framework layers, plugins, and vendor-specific core code.
-- Add only abstractions required by an actual external seam or test. Reuse proven code from earlier phases; prefer a few concrete classes over speculative architecture.
-- Enforce bounded event bytes/count, transition identities, queues, request deadlines, retries and shutdown. A failed HTTP action or camera must not stop other subscriptions. Coordinate lease renewal with long-poll timing and recheck eligibility/revisions before dispatch.
-- Follow the exact/boolean/transition/cooldown semantics in REQUIREMENTS.md; document any evidence-driven change before coding it. Do not silently add deduplication or suppress inspector events.
-
-## Secrets and operation
-
-- Keep all repository files generic and free of personal or deployment-specific information: no real IP addresses (including private/local addresses), hostnames, usernames, personal names, device brands/models, firmware identifying a personal device, destination products, or details of the user's setup. This applies to documentation, examples, fixtures, screenshots, logs, source, configuration and commit messages. Use clearly labelled placeholders and synthetic examples; retain real test configuration and device-identifying evidence only in ignored private local files. Audit files for these details before committing.
-- Never commit camera credentials, destination tokens, real destination URLs, `.env`, local DBs, or unsanitized SOAP captures. Use ignored local configuration and sanitized fixtures.
-- Do not log URLs, authorization headers, passwords, JSON bodies or arbitrary network exception text. Audit library and HttpClientFactory diagnostics as well as application logs. Seed fake secrets in redaction tests.
-- Authenticate administration, events and manual test endpoints; protect mutations from CSRF; escape all event/camera content. Fail closed without administrator setup. Mask secrets on reads and make replacement/clearing explicit.
-- Recoverable camera/action secrets require restricted `/data` ownership and permissions; do not claim encryption at rest when only permissions exist. No global certificate-validation bypass.
-- Manual destination tests cause real external actions. Send only to explicitly supplied/configured destinations within the authorized implementation test scope; use a local recorder otherwise. Coordinate camera restarts with the user; do not change firmware, camera detection settings, video/PTZ or destination-host settings as an incidental test.
-- Keep all integration examples vendor-independent. A 2xx HTTP response proves transport acceptance, not that the destination performed an action.
-
-## Verification and handoff
-
-- Use focused tests from the current phase's acceptance criteria. Avoid tests that merely mirror implementation. Use a controllable clock/fake transport for timing and recovery tests.
-- Publish NativeAOT early and run the native output on Linux, especially ONVIF parsing, SQLite native loading, JSON and authentication. A successful JIT build is not sufficient. Investigate AOT/trimming warnings; no blanket suppression.
-- Start container support with linux/amd64 and linux/arm64; ARMv7 is conditional on verified toolchain/native assets. Do not promise Linux 32-bit x86. Test native hardware when available and label emulation separately.
-- Before completing a phase, run relevant checks, inspect the diff for scope and secrets, update its evidence/handoff record and planning assumptions, and state remaining pending hardware checks. Never fabricate build success or camera observations.
-- Commit scoped work when requested; preserve unrelated user changes and existing license. Do not push, publish container images, or expand implementation scope unless authorized by the user/session.
-
-## Excluded features
-
-No streaming, recording, FFmpeg, RTSP proxy, MQTT, firmware integration, mobile/push infrastructure, complex automation, plugin system, multi-user/RBAC, vendor-specific core logic, or extra services.
+- Follow .editorconfig. C# control flow uses braces on separate lines and separate statements. Before committing, run `dotnet format whitespace OnvifWebhookBridge.slnx`, then `dotnet format whitespace OnvifWebhookBridge.slnx --verify-no-changes`.
+- Run a Release build with analyzers and relevant unit/integration tests; use the full suite for dispatch, security and persistence changes. Fix regressions without weakening assertions. See [development](docs/DEVELOPMENT.md) and the actual [CI workflow](.github/workflows/ci.yml) for commands and coverage.
+- Use deterministic synchronization and a controllable clock for timing/recovery tests. A terminal log is not operation quiescence; wait for actual completions/keyed barriers or final flow disposal before asserting settlement or reusing capacity.
+- Verify Linux NativeAOT execution for affected ONVIF parsing, JSON, SQLite, authentication and dispatch paths. Investigate AOT/trimming warnings; no blanket suppression. A JIT build alone is insufficient.
+- Support linux/amd64 and linux/arm64. Label native execution and cross-compilation/emulation separately; do not promise ARMv7 or Linux 32-bit x86 support.
+- Distinguish source review, synthetic fixtures, simulator/recorder tests, native runtime results and real-device interoperability. Verify at least two activation/reset cycles before claiming a real transition mapping works. A 2xx response proves transport acceptance, not destination side effects.
+- Report checks actually run and remaining limitations in the PR/handoff. Keep permanent guides current; do not add chronological planning logs or verification diaries.

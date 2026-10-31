@@ -14,15 +14,16 @@ namespace OnvifWebhookBridge.Dispatch
             services.AddSingleton<EventHistory>();
             services.AddSingleton<EventNormalizer>();
             services.AddSingleton<RuleState>();
-            services.AddSingleton<DispatchQueue>();
-            services.AddSingleton<CameraPipeline>();
+            services.AddSingleton<HttpActionDispatcher>();
+            services.AddSingleton(provider => new CameraPipeline(provider.GetRequiredService<RuleState>(),
+                provider.GetRequiredService<HttpActionDispatcher>().TrySubmit, provider.GetRequiredService<TimeProvider>()));
             services.AddHttpClient(HttpActionDispatcher.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateHandler)
                 .RemoveAllLoggers();
             services.AddHttpClient(HttpActionDispatcher.UnverifiedClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
                 .ConfigurePrimaryHttpMessageHandler(HttpActionDispatcher.CreateUnverifiedHandler)
                 .RemoveAllLoggers();
-            services.AddHostedService<HttpActionDispatcher>();
+            services.AddHostedService(provider => provider.GetRequiredService<HttpActionDispatcher>());
             services.AddHostedService<CameraSupervisor>();
             return services;
         }

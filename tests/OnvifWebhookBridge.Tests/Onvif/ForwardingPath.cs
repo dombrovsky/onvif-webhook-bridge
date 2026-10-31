@@ -25,6 +25,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
             const string secret = "synthetic-forwarding-secret";
             const string topic = "Synthetic/Phase3/Detection";
             var captures = new ConcurrentQueue<(string Path, string Method, string Header, string Body)>();
+            var releaseFill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var builder = WebApplication.CreateSlimBuilder();
             builder.Logging.ClearProviders();
             builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
@@ -34,6 +35,10 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 using var reader = new StreamReader(context.Request.Body);
                 var body = await reader.ReadToEndAsync(token);
                 captures.Enqueue((context.Request.Path.Value!, context.Request.Method, context.Request.Headers["X-Synthetic"].ToString(), body));
+                if (context.Request.Path == "/fill")
+                {
+                    await releaseFill.Task.WaitAsync(token);
+                }
                 context.Response.StatusCode = context.Request.Path == "/failure" ? 500 : context.Request.Path == "/redirect" ? 302 : 204;
                 if (context.Request.Path == "/redirect")
                 {
@@ -49,7 +54,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
             await using var provider = services.BuildServiceProvider();
             var pipeline = provider.GetRequiredService<CameraPipeline>();
             var history = provider.GetRequiredService<EventHistory>();
-            var queue = provider.GetRequiredService<DispatchQueue>();
+            var dispatcher = provider.GetRequiredService<HttpActionDispatcher>();
             ForwardingRule Match(string id) => new(id, "camera", topic,
                 new(FieldSection.Data, "State", "true", ComparisonMode.Boolean), true);
             // State is onvifsim's documented fallback only.
@@ -64,29 +69,36 @@ namespace OnvifWebhookBridge.Tests.Onvif
             pipeline.Configure(new("camera", "Synthetic camera", endpoint.AbsoluteUri, "synthetic-user", "synthetic-password"), actions);
             var hosted = provider.GetServices<IHostedService>().ToArray();
             var worker = hosted.OfType<CameraSupervisor>().Single();
-            var dispatcher = hosted.OfType<HttpActionDispatcher>().Single();
             using var control = new HttpClient { BaseAddress = controlAddress };
             try
             {
                 await worker.StartAsync(token);
                 await Until(() => worker.Status.Single().State == "Subscribed", token);
-                // Hold execution to deterministically exercise real-event overflow without blocking polling.
+                await dispatcher.StartAsync(token);
+                // Four active HTTP requests free pending capacity only once their delegates start.
+                for (var rule = 0; rule < 4; rule++)
+                {
+                    Check(pipeline.ManualTest("fill" + rule), "ActiveFill");
+                }
+                await Until(() => captures.Count == 4, token);
                 for (var rule = 0; rule < 4; rule++)
                 {
                     for (var i = 0; i < 25; i++)
                     {
-                        Check(pipeline.ManualTest("fill" + rule), "FillQueue");
+                        Check(pipeline.ManualTest("fill" + rule), "PendingFill");
                     }
                 }
                 await Trigger(true);
-                await Until(() => history.Snapshot().Any(e => e.Topic == topic), token);
-                Check(queue.Rejected == 3, "EventOverflow");
-                await dispatcher.StartAsync(token);
-                await Until(() => captures.Count == 100, token);
+                await Until(() => dispatcher.Rejected == 3, token);
+                Check(history.Snapshot().Any(e => e.Topic == topic), "OverflowHistory");
+                releaseFill.SetResult();
+                await Until(() => captures.Count == 104 && pipeline.Status.Where(s => s.RuleId.StartsWith("fill", StringComparison.Ordinal))
+                    .All(s => s.Result == ExecutionResult.Accepted), token);
+                Check(captures.Count == 104, "PendingFillDelivered");
                 await Trigger(false);
                 await Until(() => history.Snapshot().Any(e => e.Topic == topic && e.Data.Any(f => f.Value == "false")), token);
                 await Trigger(true);
-                await Until(() => captures.Count >= 103 && pipeline.Status.All(s => s.Result is ExecutionResult.Accepted or ExecutionResult.HttpFailure), token);
+                await Until(() => captures.Count >= 107 && pipeline.Status.All(s => s.Result is ExecutionResult.Accepted or ExecutionResult.HttpFailure), token);
                 var post = captures.Single(c => c.Path == "/post");
                 Check(post.Method == "POST" && post.Header == secret && post.Body == "{\"synthetic\":\"" + secret + "\"}", "PostLiteralHeaders");
                 Check(captures.Any(c => c.Path.StartsWith("/get", StringComparison.Ordinal) && c.Method == "GET" && c.Header == secret && c.Body.Length == 0), "GetHeaders");
@@ -98,7 +110,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
                 Check(pipeline.LastExecutions.Single(s => s.RuleId == "redirect") is { Result: ExecutionResult.HttpFailure, StatusCode: 302, Attempts: 1 }, "RedirectStatus");
                 Check(!captures.Any(c => c.Path == "/redirect-target"), "RedirectNotFollowed");
                 await Trigger(true);
-                await Until(() => captures.Count >= 108, token);
+                await Until(() => captures.Count >= 112, token);
                 Check(worker.Status.Single().State == "Subscribed", "FailureIsolation");
                 Check(!logs.Text.ToString().Contains(secret, StringComparison.Ordinal) &&
                     !logs.Text.ToString().Contains(origin, StringComparison.Ordinal), "LogRedaction");
@@ -106,6 +118,7 @@ namespace OnvifWebhookBridge.Tests.Onvif
             }
             finally
             {
+                releaseFill.TrySetResult();
                 using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 await worker.StopAsync(shutdown.Token);
                 await dispatcher.StopAsync(shutdown.Token);

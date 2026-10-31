@@ -4,48 +4,95 @@ namespace OnvifWebhookBridge.Dispatch
     using System.Net.Sockets;
     using System.Text;
     using System.Text.Json;
+    using System.Threading.Tasks.Flow;
 
-    public sealed class HttpActionDispatcher(DispatchQueue queue, CameraPipeline configuration,
-        IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null) : BackgroundService
+    // TaskFlow owns scheduling, completion status publication and shutdown.
+    public sealed class HttpActionDispatcher : IHostedService, IDisposable, IAsyncDisposable, ITaskSchedulerCompletionMiddleware
     {
+        private readonly TaskFlow flow;
+        private readonly ITaskScheduler scheduler;
+        internal ITaskScheduler Scheduler => scheduler;
+        private readonly BoundedAdmissionController admission = new(new BoundedAdmissionOptions
+        {
+            Capacity = 100,
+            CapacityMode = TaskSchedulerCapacityMode.Pending
+        });
+        private readonly IHttpClientFactory clients;
+        private readonly TimeProvider clock;
+        private readonly ILogger<HttpActionDispatcher>? logger;
+        private long rejected;
+        public long Rejected => Interlocked.Read(ref rejected);
+
+        public HttpActionDispatcher(IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null)
+            : this(clients, clock, new TaskFlow(), logger)
+        {
+        }
+
+        internal HttpActionDispatcher(IHttpClientFactory clients, TimeProvider clock, TaskFlow flow,
+            ILogger<HttpActionDispatcher>? logger = null)
+        {
+            this.clients = clients;
+            this.clock = clock;
+            this.flow = flow;
+            this.logger = logger;
+            scheduler = flow.WithKeyedScheduling<string>(StringComparer.Ordinal)
+                .WithConcurrencyLimit(4)
+                .WithBoundedAdmission(admission)
+                .WithPerKeyBoundedAdmission(new BoundedAdmissionOptions
+                {
+                    Capacity = 25,
+                    CapacityMode = TaskSchedulerCapacityMode.Pending
+                }).UseMiddleware(this);
+        }
+
+        public bool TrySubmit(DispatchJob job, CameraPipeline configuration)
+        {
+            // Already-cancelled manual tests retain their existing accepted-then-cancelled
+            // behavior. A cancellation that races admission is handled by CameraPipeline.
+            var token = job.Cancellation.IsCancellationRequested ? default : job.Cancellation;
+            var attempt = admission.TrySubmit(scheduler, job.RuleId,
+                (string _, (DispatchJob Job, CameraPipeline Configuration) work, CancellationToken cancellation) =>
+                    new ValueTask(Deliver(work.Job, work.Configuration, cancellation)), (job, configuration), token);
+            if (attempt.Admission != TaskSchedulerAdmissionResult.Accepted)
+            {
+                Interlocked.Increment(ref rejected);
+                return false;
+            }
+            var completion = attempt.Completion!;
+            // Observe the returned task as well as its middleware outcome. This callback only
+            // reads the task: status publication is part of TaskFlow's awaited lifetime.
+            completion.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => _ = completion.Exception);
+            return true;
+        }
+
+        ValueTask<TaskSchedulerOperationOutcome<T>> ITaskSchedulerCompletionMiddleware.InvokeAsync<T>(
+            TaskSchedulerOperationContext context, TaskSchedulerOperationOutcome<T> outcome,
+            TaskSchedulerCompletionDelegate<T> continuation)
+        {
+            if (outcome.Exception is { } error && error is not AdmissionRejectedException &&
+                context.State is ValueTuple<DispatchJob, CameraPipeline> work)
+            {
+                var (job, configuration) = work;
+                Record(configuration, job, error is OperationCanceledException ? ExecutionResult.Cancelled : ExecutionResult.TransportFailure,
+                    0, null, clock.GetTimestamp());
+            }
+            return continuation(context, outcome);
+        }
+
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        // Cancelling the host's wait does not abandon ownership: TaskFlow retains its
+        // shared shutdown task, and DI disposal below still awaits full settlement.
+        public Task StopAsync(CancellationToken cancellationToken) => flow.DisposeAsync().AsTask().WaitAsync(cancellationToken);
+        public ValueTask DisposeAsync() => flow.DisposeAsync();
+        public void Dispose() => flow.Dispose();
+
         public const string ClientName = "actions";
         public const string UnverifiedClientName = "actions-unverified-tls";
         public static readonly TimeSpan JobDeadline = TimeSpan.FromSeconds(30);
         public static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
         public const int MaximumResponseBytes = 16384;
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            try
-            {
-                await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Consume(stoppingToken)));
-            }
-            finally
-            {
-                foreach (var job in queue.Stop())
-                {
-                    Record(job, ExecutionResult.Cancelled, 0, null, clock.GetTimestamp());
-                }
-            }
-        }
-        private async Task Consume(CancellationToken token)
-        {
-            try
-            {
-                while (true)
-                {
-                    var job = await queue.TakeAsync(token);
-                    try
-                    {
-                        await Deliver(job, token);
-                    }
-                    finally { queue.Complete(job); }
-                }
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        }
-
-        internal async Task Deliver(DispatchJob job, CancellationToken stopping)
+        private async Task Deliver(DispatchJob job, CameraPipeline configuration, CancellationToken stopping)
         {
             var started = clock.GetTimestamp();
             var attempts = 0;
@@ -55,7 +102,7 @@ namespace OnvifWebhookBridge.Dispatch
             var remaining = JobDeadline - clock.GetElapsedTime(job.EnqueuedAt);
             if (remaining <= TimeSpan.Zero)
             {
-                Record(job, ExecutionResult.Expired, 0, null, started);
+                Record(configuration, job, ExecutionResult.Expired, 0, null, started);
                 return;
             }
             using var deadline = new CancellationTokenSource(remaining, clock);
@@ -71,7 +118,7 @@ namespace OnvifWebhookBridge.Dispatch
                         result = ExecutionResult.Stale;
                         break;
                     }
-                    Record(job, ExecutionResult.Running, attempts, code, started);
+                    Record(configuration, job, ExecutionResult.Running, attempts, code, started);
                     using var timeout = new CancellationTokenSource(AttemptTimeout, clock);
                     using var attemptToken = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, timeout.Token);
                     using var request = new HttpRequestMessage(new HttpMethod(job.Action.Method), job.Action.Address);
@@ -154,7 +201,7 @@ namespace OnvifWebhookBridge.Dispatch
                 // Fixed category only, including malformed response/header/transport exceptions.
                 result = ExecutionResult.TransportFailure;
             }
-            Record(job, result, attempts, code, started, responseJson, responseBodyStatus, transportError);
+            Record(configuration, job, result, attempts, code, started, responseJson, responseBodyStatus, transportError);
         }
         private static async Task<(string? Json, string Status)> ReadResponse(HttpContent content, CancellationToken token)
         {
@@ -201,7 +248,7 @@ namespace OnvifWebhookBridge.Dispatch
                 return (null, "Unavailable");
             }
         }
-        private void Record(DispatchJob job, ExecutionResult result, int attempts, int? code, long started,
+        private void Record(CameraPipeline configuration, DispatchJob job, ExecutionResult result, int attempts, int? code, long started,
             string? responseJson = null, string? responseBodyStatus = null, string? transportError = null)
         {
             var duration = clock.GetElapsedTime(started);
