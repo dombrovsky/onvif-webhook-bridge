@@ -3,6 +3,22 @@ using OnvifWebhookBridge.Tests.Persistence;
 using OnvifWebhookBridge.Tests.Web;
 using OnvifWebhookBridge.Tests.Dispatch;
 
+if (args is ["--telegraf", var collector, var scrape])
+{
+    try
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        await TelegrafPath.Verify(new Uri(collector), new Uri(scrape), deadline.Token);
+        Console.WriteLine("PASS: native OTLP/gRPC receipt, cumulative values and privacy in Telegraf 1.40.2.");
+        return 0;
+    }
+    catch (Exception)
+    {
+        Console.Error.WriteLine("FAIL: native Telegraf metrics verification.");
+        return 1;
+    }
+}
+
 if (args is ["--metrics-only"])
 {
     try

@@ -279,12 +279,16 @@ hand-built SOAP/events in integration tests. Unit tests may use fake clocks/tran
 and synthetic fixtures. Simulator requests are buffered because its control API does
 not accept chunked bodies; scenarios supply synthetic authentication explicitly.
 Missing Docker/image prerequisites fail visibly rather than silently skipping tests.
+Metrics integration also uses pinned Telegraf 1.40.2 for actual OTLP/gRPC receipt,
+with the shared fixture and protocol configuration described in [metrics](METRICS.md).
 The probe's synthetic SOAP smoke force-terminates its child, so it does not verify Ctrl+C.
 
 Native verification publishes both production and test-only executables and exercises
 SQLite loading/migrations/permissions, bootstrap/reset, API/session/CSRF/JSON, embedded
 assets, strict/opt-in TLS, real simulator delivery, persistence/restart and two-camera
-lease/fault/recovery/cleanup. `-StorageOnly` omits simulator paths. Historical phase
+lease/fault/recovery/cleanup, plus HTTP/protobuf and gRPC metrics export to pinned Telegraf.
+`-StorageOnly` omits ONVIF simulator paths; `-MetricsOnly` runs metrics/lifecycle and
+Telegraf checks without authentication/password hashing. Historical phase
 runner filenames remain compatibility entry points; use `Verify-Phase7Native.ps1`.
 It stages explicit source allowlists under ignored `.local/` and removes disposable
 containers. No private configuration belongs in build/test contexts. A JIT build

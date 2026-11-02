@@ -1,6 +1,7 @@
 namespace OnvifWebhookBridge.Dispatch
 {
     using System.Diagnostics.Metrics;
+    using System.Globalization;
     using OnvifWebhookBridge.Onvif;
     using OpenTelemetry;
     using OpenTelemetry.Exporter;
@@ -36,7 +37,9 @@ namespace OnvifWebhookBridge.Dispatch
             services.AddOptions<OtlpExporterOptions>().Configure<CameraMeasurements>((options, cameras) =>
                 options.HttpClientFactory = () => new HttpClient(new CollectorHandler(cameras))
                 {
-                    Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds)
+                    Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
+                    // gRPC needs buffered content to read trailers. Bound replies.
+                    MaxResponseContentBufferSize = HttpActionDispatcher.MaximumResponseBytes
                 });
             services.AddOpenTelemetry()
                 .WithMetrics(metrics => metrics.ConfigureBridgeMetrics().AddOtlpExporter(ConfigureExporter).AddMeter("OnvifWebhookBridge.Cameras")
@@ -55,11 +58,42 @@ namespace OnvifWebhookBridge.Dispatch
 
         internal static void ConfigureExporter(OtlpExporterOptions exporter, MetricReaderOptions reader)
         {
-            // HTTP/protobuf is supported by NativeAOT; no traces or log providers.
-            exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+            // AddOtlpExporter in pinned SDK 1.17 reads generic settings only. Apply
+            // metrics overrides explicitly, keeping the original HTTP default.
+            var protocol = Setting("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL") ?? Setting("OTEL_EXPORTER_OTLP_PROTOCOL");
+            exporter.Protocol = protocol?.ToLowerInvariant() switch
+            {
+                null or "http/protobuf" => OtlpExportProtocol.HttpProtobuf,
+                "grpc" => OtlpExportProtocol.Grpc,
+                _ => throw new ArgumentException("Invalid OTLP metrics protocol.")
+            };
+            if (Setting("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") is { } endpoint)
+            {
+                if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https") ||
+                    address.UserInfo.Length != 0 || address.Fragment.Length != 0)
+                {
+                    throw new ArgumentException("Invalid OTLP metrics endpoint.");
+                }
+                exporter.Endpoint = address;
+            }
+            if (Setting("OTEL_EXPORTER_OTLP_METRICS_HEADERS") is { } headers)
+            {
+                exporter.Headers = headers;
+            }
+            if (Setting("OTEL_EXPORTER_OTLP_METRICS_TIMEOUT") is { } timeout)
+            {
+                if (!int.TryParse(timeout, NumberStyles.None, CultureInfo.InvariantCulture, out var milliseconds) || milliseconds <= 0)
+                {
+                    throw new ArgumentException("Invalid OTLP metrics timeout.");
+                }
+                exporter.TimeoutMilliseconds = milliseconds;
+            }
             reader.TemporalityPreference = MetricReaderTemporalityPreference.Cumulative;
             reader.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 60_000;
         }
+
+        private static string? Setting(string name) => Environment.GetEnvironmentVariable(name) is { } value && !string.IsNullOrWhiteSpace(value)
+            ? value.Trim() : null;
 
         internal static MeterProviderBuilder ConfigureBridgeMetrics(this MeterProviderBuilder metrics)
             => metrics.SetResourceBuilder(ResourceBuilder.CreateEmpty().AddService("onvif-webhook-bridge"))

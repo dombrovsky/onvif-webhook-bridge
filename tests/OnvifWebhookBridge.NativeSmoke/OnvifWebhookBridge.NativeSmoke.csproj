@@ -5,6 +5,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../OnvifWebhookBridge.Tests/Dispatch/MetricsEnvironment.cs" Link="MetricsEnvironment.cs" />
+    <Compile Include="../OnvifWebhookBridge.Tests/Dispatch/TelegrafPath.cs" Link="TelegrafPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Dispatch/MetricsPath.cs" Link="MetricsPath.cs" />
     <Compile Include="../OnvifWebhookBridge.Tests/Web/WebhookTlsPath.cs" Link="WebhookTlsPath.cs" />
     <ProjectReference Include="../../src/OnvifWebhookBridge/OnvifWebhookBridge.csproj" />

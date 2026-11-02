@@ -2,7 +2,7 @@
 
 Metrics are disabled by default. Set `ONVIF_METRICS_ENABLED=true` in private process/container configuration to enable OTLP **metrics only**. No trace or log exporter or unauthenticated scrape endpoint is registered. The diagnostic probe is unchanged.
 
-The exporter uses HTTP/protobuf with normal TLS verification. Configure a trusted collector with standard OpenTelemetry environment variables:
+The exporter supports HTTP/protobuf and OTLP/gRPC with normal TLS verification. HTTP/protobuf remains the default when neither protocol variable is configured. Configure a trusted collector with standard OpenTelemetry environment variables:
 
 ```text
 ONVIF_METRICS_ENABLED=true
@@ -11,9 +11,26 @@ OTEL_EXPORTER_OTLP_METRICS_HEADERS=X-Collector-Key=synthetic-token
 OTEL_EXPORTER_OTLP_METRICS_TIMEOUT=10000
 ```
 
-The metrics endpoint is a full signal URL, including `/v1/metrics`. Generic `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_TIMEOUT` are fallbacks; the generic HTTP endpoint has the metrics path appended. Without an endpoint the HTTP exporter uses localhost port 4318. Set exporter credentials only in private configuration. Collector networking uses the same strict TLS, DNS/address checks and disabled redirects, cookies and proxies as verified webhook transport, and rejects application self-targets. Export failure does not affect rule admission or webhook retry policy; metrics are best effort, in memory, and reset on process restart.
+For HTTP/protobuf, the metrics endpoint is a full signal URL, including `/v1/metrics`. A generic HTTP endpoint has `/v1/metrics` appended by the SDK. For gRPC, use the collector's base address (usually port 4317), without `/v1/metrics`; the SDK uses the metrics service RPC over HTTP/2. For example:
 
-The application fixes `service.name=onvif-webhook-bridge`, cumulative temporality and a 60,000 ms periodic export interval. `OTEL_SERVICE_NAME`, resource attribute variables, protocol, temporality and interval environment settings cannot override these application settings. No host, deployment or device resource detector is installed. Exemplars are disabled so filtered attributes cannot appear in exemplar payloads.
+```text
+ONVIF_METRICS_ENABLED=true
+OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://collector.example.invalid:4317
+```
+
+| Setting | Metrics override | Generic fallback | Default |
+| --- | --- | --- | --- |
+| Protocol | `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| Endpoint | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | `OTEL_EXPORTER_OTLP_ENDPOINT` | HTTP: `http://localhost:4318/v1/metrics`; gRPC: `http://localhost:4317` plus the metrics RPC path |
+| Headers | `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | `OTEL_EXPORTER_OTLP_HEADERS` | None |
+| Timeout, milliseconds | `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` | `OTEL_EXPORTER_OTLP_TIMEOUT` | `10000` |
+
+Nonblank metrics-specific settings take precedence independently for each setting. Protocol values are `grpc` and `http/protobuf` (case insensitive); blank values are treated as unset. Invalid protocol, metrics endpoint or metrics timeout settings fail startup with a fixed diagnostic. The pinned OpenTelemetry .NET 1.17.0 `AddOtlpExporter` API reads generic options; the application explicitly applies the metrics overrides, retaining the existing metrics-only opt-in and HTTP default. No ServiceDefaults project, tracing or logging export is added.
+
+Set exporter credentials only in private configuration. Both protocols use the same guarded HTTP client: strict TLS, DNS/address checks, disabled redirects, cookies and proxies, and application self-target rejection. Buffered collector responses, needed for gRPC trailers, are limited to 16 KiB. Selecting gRPC does not bypass those restrictions or enable a global HTTP/2/TLS switch. Export failure does not affect rule admission or webhook retry policy; metrics are best effort, in memory, and reset on process restart.
+
+The application fixes `service.name=onvif-webhook-bridge`, cumulative temporality and a 60,000 ms periodic export interval. `OTEL_SERVICE_NAME`, resource attribute variables, temporality and interval environment settings cannot override these application settings. No host, deployment or device resource detector is installed. Exemplars are disabled so filtered attributes cannot appear in exemplar payloads.
 
 ## Application instruments
 
@@ -46,6 +63,8 @@ All histograms use explicit buckets. For instruments with unit `s`, boundaries a
 
 ## Verification
 
-The unit suite exercises cumulative collection, admission overflow, queued and running cancellation, actual retries, exactly-once outcomes, histogram buckets and fake-secret redaction through the OTLP HTTP/protobuf serializer with an in-process recorder. The same shared check runs in the Linux NativeAOT smoke executable, in both full and storage-only verification. Run the repository's Release build/full tests and `tests/Verify-Phase7Native.ps1` on Linux amd64 and arm64 builders as described in [development](DEVELOPMENT.md). Native execution and emulation must be reported separately. Synthetic checks do not establish real-device interoperability.
+The unit suite exercises protocol precedence/default ports, HTTP/protobuf backward compatibility, cumulative collection, admission overflow, queued and running cancellation, retries, exactly-once outcomes, histogram buckets and fake-secret redaction through an in-process recorder. The integration suite sends actual OTLP/gRPC exports to disposable **Telegraf 1.40.2**, pinned by image digest, then checks its decoded Prometheus output for cumulative values, service name, histogram buckets and redaction. It checks generic gRPC settings, metrics-specific gRPC overriding generic HTTP settings, and gRPC self-target rejection. A collection checkpoint ensures repeated-export assertions wait for newly received data.
 
-For focused native metrics verification without a simulator or password-hashing tests, use `./tests/Verify-Phase7Native.ps1 -MetricsOnly -Platform linux/amd64`. On an amd64 builder, add `-Platform linux/arm64 -CrossCompile` instead to compile arm64 and execute the focused check under emulation. This does not replace the full repository/native suite.
+The NativeAOT runner executes the same HTTP/lifecycle checks and gRPC-to-Telegraf receipt check; `-MetricsOnly` also includes Telegraf. Its fixture is `tests/Fixtures/telegraf.conf`, with a local gRPC listener and Prometheus-v2 output. Telegraf's OpenTelemetry input is gRPC-only; HTTP/protobuf compatibility is checked against the in-process recorder. Run the repository's Release build/full tests and `tests/Verify-Phase7Native.ps1` on Linux amd64 and arm64 builders as described in [development](DEVELOPMENT.md). Native execution and emulation must be reported separately. Synthetic checks do not establish real-device interoperability.
+
+For focused native metrics verification without an ONVIF simulator or password-hashing tests, use `./tests/Verify-Phase7Native.ps1 -MetricsOnly -Platform linux/amd64`. Docker must be available for the pinned Telegraf collector. On an amd64 builder, use `-Platform linux/arm64 -CrossCompile` to compile arm64 and execute the focused check under emulation; the collector itself runs on the builder's architecture. This does not replace the full repository/native suite.

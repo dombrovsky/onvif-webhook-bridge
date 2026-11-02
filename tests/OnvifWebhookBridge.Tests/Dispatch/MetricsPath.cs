@@ -20,6 +20,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
     {
         internal static async Task Verify()
         {
+            using var environment = new MetricsEnvironment();
             const string secret = "synthetic-secret-DO-NOT-EXPORT";
             using var capture = new Capture();
             using var reader = new PeriodicExportingMetricReader(capture, 60_000)
@@ -154,6 +155,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
                 container.GetRequiredService<CameraPipeline>().Configure(new("synthetic-camera", "Synthetic", "http://camera.invalid/", Enabled: false), []);
                 var meterProvider = container.GetRequiredService<MeterProvider>();
                 Require(meterProvider.ForceFlush());
+                Require(wire.ContentType == "application/x-protobuf");
+                Require(wire.Path == "/v1/metrics");
                 Require(Encoding.UTF8.GetString(wire.Payload).Contains("bridge.camera.count", StringComparison.Ordinal));
                 var options = new OtlpExporterOptions { Protocol = OtlpExportProtocol.Grpc };
                 var reader = new MetricReaderOptions { TemporalityPreference = MetricReaderTemporalityPreference.Delta };
@@ -201,6 +204,7 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             await app.StartAsync();
             var origin = new Uri(app.Urls.Single());
             using var client = factory();
+            Require(client.MaxResponseContentBufferSize == HttpActionDispatcher.MaximumResponseBytes);
             using (var request = new HttpRequestMessage(HttpMethod.Post, new Uri(origin, "/v1/metrics")))
             using (var response = client.Send(request))
             {
@@ -292,8 +296,12 @@ namespace OnvifWebhookBridge.Tests.Dispatch
         private sealed class Wire : HttpMessageHandler
         {
             internal byte[] Payload = [];
+            internal string? ContentType;
+            internal string? Path;
             protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
             {
+                ContentType = request.Content!.Headers.ContentType?.MediaType;
+                Path = request.RequestUri!.AbsolutePath;
                 Payload = request.Content!.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult();
                 return new(HttpStatusCode.OK)
                 {
@@ -302,6 +310,8 @@ namespace OnvifWebhookBridge.Tests.Dispatch
             }
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
+                ContentType = request.Content!.Headers.ContentType?.MediaType;
+                Path = request.RequestUri!.AbsolutePath;
                 Payload = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
                 return new(HttpStatusCode.OK)
                 {

@@ -19,6 +19,9 @@ $files += @('tests/OnvifWebhookBridge.Tests/Web/BrowserPath.cs', 'tests/OnvifWeb
 $files += 'tests/OnvifWebhookBridge.Tests/Web/HealthPath.cs'
 $files += 'tests/OnvifWebhookBridge.Tests/Web/WebhookTlsPath.cs'
 $files += 'tests/OnvifWebhookBridge.Tests/Dispatch/MetricsPath.cs'
+$files += 'tests/OnvifWebhookBridge.Tests/Dispatch/MetricsEnvironment.cs'
+$files += 'tests/OnvifWebhookBridge.Tests/Dispatch/TelegrafPath.cs'
+$files += 'tests/Fixtures/telegraf.conf'
 $files += Get-ChildItem -LiteralPath (Join-Path $repository 'src/OnvifWebhookBridge/wwwroot') -File | ForEach-Object { "src/OnvifWebhookBridge/wwwroot/$($_.Name)" }
 foreach ($folder in @('Events', 'Rules', 'Onvif', 'Dispatch', 'Persistence', 'Web')) {
     $files += Get-ChildItem -LiteralPath (Join-Path $repository "src/OnvifWebhookBridge/$folder") -Filter '*.cs' |
@@ -68,6 +71,16 @@ $testImage = "onvif-bridge-tests/phase7-native:$architecture"
 docker build --platform $Platform --tag $testImage $stage
 if ($LASTEXITCODE -ne 0) { throw 'Native test image build failed.' }
 if ($Platform -eq "linux/amd64") { docker tag $testImage onvif-bridge-tests/phase7-native }
+# The same pinned collector/configuration is used by the JIT integration test.
+$collector = docker run --detach --rm --mount "type=bind,source=$stage/tests/Fixtures/telegraf.conf,target=/etc/telegraf/telegraf.conf,readonly" telegraf:1.40.2@sha256:3992a56245a9477dfad5b98d9354d3ea7c1bced0aab6630ba49f23ac9a4d269e
+if ($LASTEXITCODE -ne 0) { throw 'Telegraf startup failed.' }
+try {
+    docker run --rm --platform $Platform --network "container:$collector" $testImage --telegraf http://127.0.0.1:4317 http://127.0.0.1:9273/metrics
+    if ($LASTEXITCODE -ne 0) { throw 'Native Telegraf metrics verification failed.' }
+}
+finally {
+    docker stop $collector | Out-Null
+}
 if ($MetricsOnly) {
     docker run --rm --platform $Platform $testImage --metrics-only
     if ($LASTEXITCODE -ne 0) { throw 'Native metrics verification failed.' }
