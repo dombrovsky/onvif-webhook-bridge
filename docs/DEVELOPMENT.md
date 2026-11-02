@@ -17,7 +17,7 @@ and versioning/publication in [releasing](RELEASING.md).
 ## Architecture and repository structure
 
 One .NET 10/C# 14 NativeAOT process hosts Minimal APIs, embedded plain HTML/CSS/JavaScript,
-independent ONVIF PullPoint workers, matching/dispatch through TaskFlow 1.1.0-rc.9 and SQLite configuration.
+independent ONVIF PullPoint workers, matching/dispatch through TaskFlow 1.1.0-rc.10 and SQLite configuration.
 There is no frontend build, ORM, message broker or external database. Keep abstractions
 at actual external seams; avoid speculative frameworks or vendor-specific core logic.
 The product excludes video/RTSP, MQTT, automation engines, plugins and multi-user/RBAC.
@@ -185,7 +185,7 @@ survive until lease expiry. Compose allows 15 seconds for process termination.
 
 ### HTTP delivery and diagnostics
 
-TaskFlow 1.1.0-rc.9 owns keyed FIFO/round-robin scheduling, capacity and lifetime.
+TaskFlow 1.1.0-rc.10 owns keyed FIFO/round-robin scheduling, capacity and lifetime.
 Use its published package and version-matched source; do not duplicate queues,
 active sets or the lifecycle registry in application code. Production binds the
 singleton dispatcher's synchronous, non-waiting `TrySubmit` to `CameraPipeline`;
@@ -245,6 +245,8 @@ IDs, fixed categories, attempts, status and duration. No URLs (visible or sensit
 credentials, headers, bodies or arbitrary exception messages belong in logs.
 Security and transaction contracts continue in [administration](ADMINISTRATION.md)
 and [storage](DATA_STORAGE.md); do not bypass the store for persistent mutations.
+
+Optional metrics-only OTLP export, instrument names, privacy filters and configuration are described in [metrics](METRICS.md). Its synthetic export and shutdown checks also run in the NativeAOT smoke runner.
 
 ## Validation
 

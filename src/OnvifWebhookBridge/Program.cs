@@ -21,9 +21,11 @@ builder.Logging.ClearProviders();
 builder.Services.AddPersistentCameraPipeline(Environment.GetEnvironmentVariable("ONVIF_DATA_DIRECTORY") ??
     (OperatingSystem.IsLinux() ? "/data" : Path.Combine(AppContext.BaseDirectory, "data")));
 builder.Services.AddAdministration();
+builder.Services.AddBridgeMetrics();
 var app = builder.Build();
 try
 {
+    app.Services.InitializeBridgeMetrics();
     app.Services.GetRequiredService<ConfigurationStore>().Initialize();
     app.Services.GetRequiredService<AdminAuthentication>().Bootstrap(Environment.GetEnvironmentVariable,
         args.Contains("--reset-administrator", StringComparer.Ordinal));

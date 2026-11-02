@@ -154,9 +154,15 @@ namespace OnvifWebhookBridge.Dispatch
         {
             lock (gate)
             {
-                return rules.Process(notification, (r, _) => Admit(r.Id, false, default),
+                BridgeMetrics.Events.Add(1);
+                var decisions = rules.Process(notification, (r, _) => Admit(r.Id, false, default),
                 cameras.TryGetValue(notification.CameraId, out var entry) && entry.Camera.Enabled &&
                 (sourceSnapshot is null || ReferenceEquals(entry.Camera, sourceSnapshot)));
+                foreach (var decision in decisions)
+                {
+                    BridgeMetrics.Decisions.Add(1, new KeyValuePair<string, object?>("decision", decision.Kind.ToString()));
+                }
+                return decisions;
             }
         }
         public void ResetEpoch(CameraConfiguration snapshot)

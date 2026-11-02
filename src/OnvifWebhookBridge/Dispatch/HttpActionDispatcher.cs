@@ -5,6 +5,7 @@ namespace OnvifWebhookBridge.Dispatch
     using System.Text;
     using System.Text.Json;
     using System.Threading.Tasks.Flow;
+    using OpenTelemetry.Metrics;
 
     // TaskFlow owns scheduling, completion status publication and shutdown.
     public sealed class HttpActionDispatcher : IHostedService, IDisposable, IAsyncDisposable, ITaskSchedulerCompletionMiddleware
@@ -23,7 +24,10 @@ namespace OnvifWebhookBridge.Dispatch
         private long rejected;
         public long Rejected => Interlocked.Read(ref rejected);
 
-        public HttpActionDispatcher(IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null)
+        // DI creates the optional provider first, so final flow settlement precedes
+        // its disposal/final export even when the host's StopAsync wait is cancelled.
+        public HttpActionDispatcher(IHttpClientFactory clients, TimeProvider clock, ILogger<HttpActionDispatcher>? logger = null,
+            MeterProvider? metrics = null)
             : this(clients, clock, new TaskFlow(), logger)
         {
         }
@@ -56,11 +60,14 @@ namespace OnvifWebhookBridge.Dispatch
             if (attempt.Admission != TaskSchedulerAdmissionResult.Accepted)
             {
                 Interlocked.Increment(ref rejected);
+                BridgeMetrics.Admissions.Add(1, new KeyValuePair<string, object?>("result", "Rejected"));
                 return false;
             }
             var completion = attempt.Completion!;
             // Observe the returned task as well as its middleware outcome. This callback only
             // reads the task: status publication is part of TaskFlow's awaited lifetime.
+            BridgeMetrics.Admissions.Add(1, new KeyValuePair<string, object?>("result", "Accepted"));
+            job.MetricAccepted();
             completion.ConfigureAwait(false).GetAwaiter().UnsafeOnCompleted(() => _ = completion.Exception);
             return true;
         }
@@ -75,6 +82,10 @@ namespace OnvifWebhookBridge.Dispatch
                 var (job, configuration) = work;
                 Record(configuration, job, error is OperationCanceledException ? ExecutionResult.Cancelled : ExecutionResult.TransportFailure,
                     0, null, clock.GetTimestamp());
+            }
+            if (context.State is ValueTuple<DispatchJob, CameraPipeline> completed && outcome.Exception is not AdmissionRejectedException)
+            {
+                completed.Item1.MetricCompleted(clock.GetElapsedTime(completed.Item1.EnqueuedAt));
             }
             return continuation(context, outcome);
         }
@@ -144,6 +155,10 @@ namespace OnvifWebhookBridge.Dispatch
                             result = ExecutionResult.Stale;
                             attempts--;
                             break;
+                        }
+                        if (attempts > 1)
+                        {
+                            BridgeMetrics.Retries.Add(1);
                         }
                         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, attemptToken.Token);
                         code = (int)response.StatusCode;
@@ -251,6 +266,10 @@ namespace OnvifWebhookBridge.Dispatch
         private void Record(CameraPipeline configuration, DispatchJob job, ExecutionResult result, int attempts, int? code, long started,
             string? responseJson = null, string? responseBodyStatus = null, string? transportError = null)
         {
+            if (result != ExecutionResult.Running)
+            {
+                job.MetricResult = result;
+            }
             var duration = clock.GetElapsedTime(started);
             configuration.Record(new(job.Id, job.RuleId, clock.GetUtcNow(), result, attempts, code, duration, responseJson, responseBodyStatus, transportError));
             if (result != ExecutionResult.Running)

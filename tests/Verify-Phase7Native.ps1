@@ -1,6 +1,6 @@
 # Linux amd64/arm64 NativeAOT protocol verification using only disposable synthetic onvifsim.
 # Run from the repository root. Docker engine/image access is required.
-param([switch]$StorageOnly, [ValidateSet("linux/amd64", "linux/arm64")][string]$Platform = "linux/amd64", [switch]$CrossCompile)
+param([switch]$StorageOnly, [ValidateSet("linux/amd64", "linux/arm64")][string]$Platform = "linux/amd64", [switch]$CrossCompile, [switch]$MetricsOnly)
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path '.').Path
 $stage = Join-Path $repository ".local/phase7-native-source-$([Guid]::NewGuid().ToString('N'))"
@@ -18,6 +18,7 @@ $files = @('Directory.Build.props', 'Directory.Build.targets',
 $files += @('tests/OnvifWebhookBridge.Tests/Web/BrowserPath.cs', 'tests/OnvifWebhookBridge.Tests/Web/BrowserFixture.cs')
 $files += 'tests/OnvifWebhookBridge.Tests/Web/HealthPath.cs'
 $files += 'tests/OnvifWebhookBridge.Tests/Web/WebhookTlsPath.cs'
+$files += 'tests/OnvifWebhookBridge.Tests/Dispatch/MetricsPath.cs'
 $files += Get-ChildItem -LiteralPath (Join-Path $repository 'src/OnvifWebhookBridge/wwwroot') -File | ForEach-Object { "src/OnvifWebhookBridge/wwwroot/$($_.Name)" }
 foreach ($folder in @('Events', 'Rules', 'Onvif', 'Dispatch', 'Persistence', 'Web')) {
     $files += Get-ChildItem -LiteralPath (Join-Path $repository "src/OnvifWebhookBridge/$folder") -Filter '*.cs' |
@@ -67,6 +68,11 @@ $testImage = "onvif-bridge-tests/phase7-native:$architecture"
 docker build --platform $Platform --tag $testImage $stage
 if ($LASTEXITCODE -ne 0) { throw 'Native test image build failed.' }
 if ($Platform -eq "linux/amd64") { docker tag $testImage onvif-bridge-tests/phase7-native }
+if ($MetricsOnly) {
+    docker run --rm --platform $Platform $testImage --metrics-only
+    if ($LASTEXITCODE -ne 0) { throw 'Native metrics verification failed.' }
+    return
+}
 if ($StorageOnly) {
     docker run --rm --platform $Platform $testImage --storage-only
     if ($LASTEXITCODE -ne 0) { throw "Native storage verification failed." }

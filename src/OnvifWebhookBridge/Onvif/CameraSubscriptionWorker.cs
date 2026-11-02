@@ -159,6 +159,7 @@ namespace OnvifWebhookBridge.Onvif
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { }
                     catch (Exception)
                     {
+                        BridgeMetrics.SubscriptionFailures.Add(1);
                         status = status with
                         {
                             Failures = Math.Min(status.Failures + 1, 32)

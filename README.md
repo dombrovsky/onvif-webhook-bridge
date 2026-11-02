@@ -18,6 +18,7 @@ Configure cameras and event rules from a browser. No cloud account required.
 - **Configurable forwarding:** exact topic and optional text/boolean field matching, occurrence or transition modes, cooldowns, GET or POST, custom headers and literal JSON bodies.
 - **Browser administration:** manage cameras and rules, check connection status, test saved HTTP actions, and inspect recent delivery results.
 - **Persistent configuration:** cameras, rules and administrator setup survive container recreation in a SQLite data volume.
+- **Optional metrics:** aggregate application and standard .NET metrics through an opt-in [OpenTelemetry metrics exporter](docs/METRICS.md).
 - **Self-contained deployment:** one .NET NativeAOT process serves the UI, polls cameras and delivers actions; no external database or frontend service is needed.
 - **Protected administration:** one administrator, no default credentials, bounded sessions, CSRF protection and masked secret reads. Recoverable camera and webhook secrets require private storage; see [security](SECURITY.md).
 

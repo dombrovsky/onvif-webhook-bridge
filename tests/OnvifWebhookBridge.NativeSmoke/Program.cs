@@ -1,6 +1,22 @@
 using OnvifWebhookBridge.Tests.Onvif;
 using OnvifWebhookBridge.Tests.Persistence;
 using OnvifWebhookBridge.Tests.Web;
+using OnvifWebhookBridge.Tests.Dispatch;
+
+if (args is ["--metrics-only"])
+{
+    try
+    {
+        await MetricsPath.Verify();
+        Console.WriteLine("PASS: native metrics export, privacy, collector transport and dispatch settlement.");
+        return 0;
+    }
+    catch (Exception)
+    {
+        Console.Error.WriteLine("FAIL: native metrics verification.");
+        return 1;
+    }
+}
 
 if (args is ["--recorder"])
 {
@@ -18,6 +34,7 @@ if (args is ["--storage-only"])
 {
     try
     {
+        await MetricsPath.Verify();
         StoragePath.Verify();
         await AuthenticationPath.Verify();
         await ExecutablePath.Verify(CancellationToken.None);
@@ -42,6 +59,7 @@ try
     using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(
         Environment.GetEnvironmentVariable("ONVIF_TEST_EMULATION") == "1" ? 30 : 5));
     StoragePath.Verify();
+    await MetricsPath.Verify();
     await AuthenticationPath.Verify();
     await ExecutablePath.Verify(deadline.Token);
     await SecurityPath.Verify(deadline.Token);
