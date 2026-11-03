@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- Authoritative release version. Bump through a reviewed PR before releasing. -->
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <!-- GitHub assigns a counter per workflow; local builds default to candidate 1. -->
     <RcNumber Condition="'$(GITHUB_RUN_NUMBER)' == ''">1</RcNumber>
     <RcNumber Condition="'$(GITHUB_RUN_NUMBER)' != ''">$(GITHUB_RUN_NUMBER)</RcNumber>
