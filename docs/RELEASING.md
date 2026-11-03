@@ -39,7 +39,7 @@ After completing the repository and registry setup:
 | Release run 43 | `0.1.0` | `rc.$(RcNumber)` | `0.1.0-rc.43` | `v0.1.0-rc.43`, prerelease | `0.1.0-rc.43` only |
 | Stable | `0.1.0` | empty | `0.1.0` | `v0.1.0`, stable | `0.1.0`, then `latest` |
 
-For `0.2.0` or `1.0.0`, bump the prefix and leave the suffix empty. Candidate runs can reuse the same merged SHA; stable releases require the merged empty-suffix change. The release workflow creates no automatic version-bump commit or PR. Use the normal main-branch CI before release; the release also repeats that same reusable gate with the chosen immutable SHA and source version.
+For the next development series, bump the prefix (for example to `0.2.0`) and set the suffix to `rc.$(RcNumber)` so subsequent publications are prereleases. Clear the suffix only when preparing a stable release. Candidate runs can reuse the same merged SHA; stable releases require the merged empty-suffix change. The release workflow creates no automatic version-bump commit or PR. Use the normal main-branch CI before release; the release also repeats that same reusable gate with the chosen immutable SHA and source version.
 
 ## Local version and image labels
 

@@ -5,7 +5,7 @@
     <!-- GitHub assigns a counter per workflow; local builds default to candidate 1. -->
     <RcNumber Condition="'$(GITHUB_RUN_NUMBER)' == ''">1</RcNumber>
     <RcNumber Condition="'$(GITHUB_RUN_NUMBER)' != ''">$(GITHUB_RUN_NUMBER)</RcNumber>
-    <VersionSuffix></VersionSuffix>
+    <VersionSuffix>rc.$(RcNumber)</VersionSuffix>
     <Version>$(VersionPrefix)</Version>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
